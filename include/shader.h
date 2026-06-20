@@ -11,6 +11,7 @@ namespace renderer
             FRAGMENT    = 2
         };
 
+        const char* path    { nullptr };
         Type type           { Type::UNKNOWN };
         unsigned int index  { 0 };
     };

@@ -79,6 +79,24 @@ namespace renderer
         return cursor.getOffset();
     }
 
+    void allocateBuffers(Allocator* allocator, size_t count)
+    {
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<unsigned int>(count);
+    }
+
+    void allocateVertexArrays(Allocator* allocator, size_t count)
+    {
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<unsigned int>(count);
+    }
+
+    void allocateTextures(Allocator* allocator, size_t count)
+    {
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<unsigned int>(count);
+    }
+
     void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes)
     {
         auto* meshCount = allocator->requestMemory<uint64_t>(count);
@@ -90,16 +108,15 @@ namespace renderer
             auto* bufferIndices = allocator->requestMemory<ConstMesh::BufferIndices>();
             *bufferIndices      = mesh.bufferIndices;
 
-            auto* vertexCount = allocator->requestMemory<uint64_t>(mesh.vertexCount);
+            auto* vertexCount   = allocator->requestMemory<uint64_t>(mesh.vertexCount);
+            auto* vertices      = allocator->requestMemoryArray<Vertex>(*vertexCount);
             for (uint64_t j = 0; j < *vertexCount; ++j)
             {
-                auto* vertex    = allocator->requestMemory<Vertex>();
-                *vertex         = mesh.vertices[j];
+                vertices[j] = mesh.vertices[j];
             }
 
             auto* triangleCount = allocator->requestMemory<uint64_t>(mesh.triangleCount);
-
-            auto* triangles = allocator->requestMemoryArray<unsigned int>(*triangleCount);
+            auto* triangles     = allocator->requestMemoryArray<unsigned int>(*triangleCount);
             for (uint64_t j = 0; j < *triangleCount; ++j)
             {
                 triangles[j] = mesh.triangles[j]; 
@@ -138,76 +155,65 @@ namespace renderer
         }
     }
 
-    void allocateShaders(Allocator* allocator, size_t count, const Shader* shaders)
+    void allocateShaders(Allocator* allocator, size_t count)
     {
-        auto* shaderCount   = allocator->requestMemory<uint64_t>(count);
-        auto* shaderData    = allocator->requestMemoryArray<Shader>(count);
-
-        for (size_t i = 0; i < *shaderCount; ++i)
-        {
-            shaderData[i] = shaders[i];
-        }
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<Shader>(count);
     }
 
-    void allocateShaderPrograms(Allocator* allocator, size_t count, unsigned int* programs)
+    void allocateShaderPrograms(Allocator* allocator, size_t count)
     {
-        auto* programCount  = allocator->requestMemory<uint64_t>(count);
-        auto* programData   = allocator->requestMemoryArray<unsigned int>(count);
-
-        for (size_t i = 0; i < *programCount; ++i)
-        {
-            programData[i] = programs[i];
-        }
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<unsigned int>(count);
     }
 
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
-        
-        MemoryCursor<MEMORY_ALIGNMENT> cursor;
 
         allocateBuffers(allocator, 3);
         allocateVertexArrays(allocator, 1);
         allocateTextures(allocator, 1);
+        allocateShaders(allocator, 2);
+        allocateShaderPrograms(allocator, 1);
 
-        Shader shaders[2] = {
-            { Shader::Type::VERTEX },
-            { Shader::Type::FRAGMENT }
-        };
-
-        const char* shaderFiles[2] = {
-            "./shaders/3d_transform_vertex.slh",
-            "./shaders/3d_transform_fragment.slh"
-        };
-
-        generateShaders(2, shaders);
-        compileShaders(2, shaders, shaderFiles);
-        allocateShaders(allocator, 2, shaders);
-
-        unsigned int shaderPrograms[1] = { 0 };
-
-        generateShaderPrograms(1, shaderPrograms);
-        allocateShaderPrograms(allocator, 1, shaderPrograms);
-        compileShaderProgram(shaderPrograms[0], 2, shaders);
-
-        // auto* locationsDescriptor = allocator->requestMemory<LocationsDescriptor>();
-
-        // locationsDescriptor->materialColorLocation = 1;
-        // locationsDescriptor->colorLocation = 2;
-        // locationsDescriptor->transformLocation = 3;
-        // locationsDescriptor->uvLocation = 4;
-        // locationsDescriptor->positionLocation = 9;
-
-        Vertex quadVertices[4] = {
+        Vertex quadVertices[4]          = {
             { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
             { { -0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
             { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
             { { 0.5f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
         };
-        unsigned int quadTriangles[6] = { 0, 2, 1, 0, 3, 2 };
-        ConstMesh meshList[1] = { { quadVertices, quadTriangles, 4, 6 } };
-        generateMeshes(allocator, 1, meshList);
+        unsigned int quadTriangles[6]   = { 0, 2, 1, 0, 3, 2 };
+        ConstMesh meshList[1]           = { { quadVertices, quadTriangles, 4, 6 } };
         allocateMeshes(allocator, 1, meshList);
+    }
+
+    void initializeGraphicsResources(Allocator* allocator)
+    {
+        generateBuffers(allocator);
+        generateVertexArrays(allocator);
+        generateTextures(allocator);
+
+        Shader shaderList[2] = {
+            { "./shaders/3d_transform_vertex.slh", Shader::Type::VERTEX },
+            { "./shaders/3d_transform_fragment.slh", Shader::Type::FRAGMENT },
+        };
+        generateShaders(allocator, 2, shaderList);
+        
+        size_t shaderIndices[2] = { 0, 1 };
+        generateShaderPrograms(allocator);
+        compileShaderProgram(allocator, 0, 2, shaderIndices);
+
+        generateMeshes(allocator);
+        uploadMeshes(allocator);
+    }
+
+    void freeGraphicsResources(Allocator* allocator)
+    {
+        freeShaders(allocator);
+        freeTextures(allocator);
+        freeVertexArrays(allocator);
+        freeBuffers(allocator);
     }
 
     void render(const Allocator* allocator)

@@ -26,25 +26,27 @@ namespace renderer
     uint64_t getMeshDataOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
+    void generateBuffers(Allocator* allocator);
     void freeBuffers(Allocator* allocator);
 
     void allocateVertexArrays(Allocator* allocator, size_t count);
+    void generateVertexArrays(Allocator* allocator);
     void freeVertexArrays(Allocator* allocator);
 
     void allocateTextures(Allocator* allocator, size_t count);
+    void generateTextures(Allocator* allocator);
     void freeTextures(Allocator* allocator);
 
-    void generateMeshes(Allocator* allocator, size_t count, ConstMesh* meshes);
     void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes);
+    void generateMeshes(Allocator* allocator);
     void uploadMeshes(const Allocator* allocator);
     void uploadMesh(const ConstMesh* mesh);
 
-    void generateShaders(size_t count, Shader* shaders);
-    void compileShaders(size_t count, Shader* shaders, const char* const* paths);
-    void allocateShaders(Allocator* allocator, size_t count, const Shader* shaders);
-    void generateShaderPrograms(size_t count, unsigned int* programs);
-    void allocateShaderPrograms(Allocator* allocator, size_t count, unsigned int* programs);
-    void compileShaderProgram(unsigned int program, size_t shaderCount, const Shader* shaders);
+    void allocateShaders(Allocator* allocator, size_t count);
+    void generateShaders(Allocator* allocator, size_t count, Shader* shaders);
+    void allocateShaderPrograms(Allocator* allocator, size_t count);
+    void generateShaderPrograms(Allocator* allocator);
+    void compileShaderProgram(const Allocator* allocator, size_t index, size_t shaderCount, const size_t* shaderIndices);
     void freeShaders(Allocator* allocator);
 
     // TODO(Karim):
@@ -53,6 +55,8 @@ namespace renderer
     void setShaderLocations(unsigned int program, LocationsDescriptor* descriptor);
 
     void allocate(Allocator* allocator);
+    void initializeGraphicsResources(Allocator* allocator);
+    void freeGraphicsResources(Allocator* allocator);
     void initializeGraphicsState();
     void clearFrameBuffer();
 

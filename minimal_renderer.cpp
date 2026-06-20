@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 
     renderer::Allocator renderAllocator;
     renderer::allocate(&renderAllocator);
-    renderer::uploadMeshes(&renderAllocator);
+    renderer::initializeGraphicsResources(&renderAllocator);
     renderer::initializeGraphicsState();
 
     while (!glfwWindowShouldClose(window))
@@ -48,10 +48,7 @@ int main(int argc, char** argv)
         glfwSwapBuffers(window);
     }
 
-    renderer::freeShaders(&renderAllocator);
-    renderer::freeTextures(&renderAllocator);
-    renderer::freeVertexArrays(&renderAllocator);
-    renderer::freeBuffers(&renderAllocator);
+    renderer::freeGraphicsResources(&renderAllocator);
     
     glfwDestroyWindow(window);
     glfwTerminate();
