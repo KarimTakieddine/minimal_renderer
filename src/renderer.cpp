@@ -4,7 +4,6 @@
 #include <memory_view.hpp>
 
 #include "locations_descriptor.h"
-#include "mesh.h"
 #include "renderer.h"
 
 namespace
@@ -16,13 +15,16 @@ namespace
 
 namespace renderer
 {
-    void allocateMeshes(Allocator* allocator, size_t count, const Mesh* meshes)
+    void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes)
     {
         auto* meshCount = allocator->requestMemory<uint64_t>(count);
         
         for (size_t i = 0; i < *meshCount; ++i)
         {
-            const Mesh& mesh = meshes[i];
+            const ConstMesh& mesh = meshes[i];
+
+            auto* bufferIndices = allocator->requestMemory<ConstMesh::BufferIndices>();
+            *bufferIndices      = mesh.bufferIndices;
 
             auto* vertexCount = allocator->requestMemory<uint64_t>(mesh.vertexCount);
             for (uint64_t j = 0; j < *vertexCount; ++j)
@@ -56,6 +58,9 @@ namespace renderer
 
         for (uint64_t i = 0; i < *meshCount; ++i)
         {
+            const auto* bufferIndices = meshMemoryView.read_object<ConstMesh::BufferIndices>(meshCursor.getOffset()).data();
+            meshCursor.step<ConstMesh::BufferIndices>();
+
             const auto* vertexCount = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset()).data();
             const auto vertexData   = meshMemoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
             meshCursor.step_array<Vertex>(*vertexCount);
@@ -63,6 +68,9 @@ namespace renderer
             const auto* triangleCount   = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset()).data();
             const auto triangleData     = meshMemoryView.read_contiguous_array<unsigned int>(meshCursor.getOffset());
             meshCursor.step_array<unsigned int>(*triangleCount);
+
+            ConstMesh mesh{ vertexData.data(), triangleData.data(), *vertexCount, *triangleCount, *bufferIndices };
+            uploadMesh(&mesh);
         }
     }
 
@@ -85,7 +93,7 @@ namespace renderer
             { { 0.5f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
         };
         unsigned int quadTriangles[6] = { 0, 2, 1, 0, 3, 2 };
-        Mesh quadMesh[2] = { { quadVertices, quadTriangles, 4, 6 }, { quadVertices, quadTriangles, 4, 6 } };
+        ConstMesh quadMesh[2] = { { quadVertices, quadTriangles, 4, 6, { 1, 3 } }, { quadVertices, quadTriangles, 4, 6, { 1, 3 } } };
         allocateMeshes(allocator, 2, quadMesh);
     }
 
