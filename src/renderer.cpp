@@ -140,8 +140,9 @@ namespace renderer
             { { 0.5f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
         };
         unsigned int quadTriangles[6] = { 0, 2, 1, 0, 3, 2 };
-        ConstMesh quadMesh[2] = { { quadVertices, quadTriangles, 4, 6, { 1, 3 } }, { quadVertices, quadTriangles, 4, 6, { 1, 3 } } };
-        allocateMeshes(allocator, 2, quadMesh);
+        ConstMesh meshList[1] = { { quadVertices, quadTriangles, 4, 6 } };
+        generateMeshes(allocator, 1, meshList);
+        allocateMeshes(allocator, 1, meshList);
     }
 
     void render(const Allocator* allocator)

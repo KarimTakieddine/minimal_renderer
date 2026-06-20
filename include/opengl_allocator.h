@@ -12,8 +12,8 @@ namespace renderer
     class OpenGLAllocator
     {
     public:
-        explicit OpenGLAllocator(OpenGLFunc genFunc, OpenGLFunc delFunc, unsigned int* data) :
-            m_genFunc(std::move(genFunc)), m_delFunc(std::move(delFunc)), m_data(data), m_next(data), m_bounds(data) { };
+        explicit OpenGLAllocator(OpenGLFunc genFunc, OpenGLFunc delFunc, unsigned int* data, unsigned int* bounds) :
+            m_genFunc(std::move(genFunc)), m_delFunc(std::move(delFunc)), m_data(data), m_next(data), m_bounds(bounds) { };
 
         void allocate(int count)
         {

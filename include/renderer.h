@@ -28,6 +28,7 @@ namespace renderer
     void allocateTextures(Allocator* allocator, size_t count);
     void freeTextures(Allocator* allocator);
 
+    void generateMeshes(Allocator* allocator, size_t count, ConstMesh* meshes);
     void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes);
     void uploadMeshes(const Allocator* allocator);
     void uploadMesh(const ConstMesh* mesh);

@@ -12,7 +12,7 @@ namespace renderer
         const auto* bufferCount = allocator->requestMemory<uint64_t>(count);
         auto* bufferData        = allocator->requestMemoryArray<unsigned int>(count);
 
-        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData);
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData, bufferData);
         bufferAllocator.allocate(static_cast<GLsizei>(count));
     }
 
@@ -22,9 +22,12 @@ namespace renderer
 
         MutableMemoryView memoryView(allocatorSpan);
         auto buffers = memoryView.read_contiguous_array<unsigned int>(getBufferOffset(allocator));
+
+        auto* bufferData            = buffers.data();
+        const size_t bufferCount    = buffers.size();
         
-        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, buffers.data());
-        bufferAllocator.free(static_cast<GLsizei>(buffers.size()));
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData, bufferData + bufferCount);
+        bufferAllocator.free(static_cast<GLsizei>(bufferCount));
     }
 
     void allocateVertexArrays(Allocator* allocator, size_t count)
@@ -32,7 +35,7 @@ namespace renderer
         const auto* vertexArrayCount    = allocator->requestMemory<uint64_t>(count);
         auto* vertexArrayData           = allocator->requestMemoryArray<unsigned int>(count);
 
-        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayData);
+        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayData, vertexArrayData);
         vertexArrayAllocator.allocate(static_cast<GLsizei>(count));
     }
 
@@ -42,9 +45,12 @@ namespace renderer
 
         MutableMemoryView memoryView(allocatorSpan);
         auto vertexArrays = memoryView.read_contiguous_array<unsigned int>(getVertexArrayOffset(allocator));
+
+        auto* vertexArrayData           = vertexArrays.data();
+        const size_t vertexArrayCount   = vertexArrays.size();
         
-        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrays.data());
-        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrays.size()));
+        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayData, vertexArrayData + vertexArrayCount);
+        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrayCount));
     }
 
     void allocateTextures(Allocator* allocator, size_t count)
@@ -52,7 +58,7 @@ namespace renderer
         const auto* textureCount    = allocator->requestMemory<uint64_t>(count);
         auto* textureData           = allocator->requestMemoryArray<unsigned int>(count);
 
-        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData);
+        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData);
         textureAllocator.allocate(static_cast<GLsizei>(count));
     }
 
@@ -62,9 +68,33 @@ namespace renderer
 
         MutableMemoryView memoryView(allocatorSpan);
         auto textures = memoryView.read_contiguous_array<unsigned int>(getTextureOffset(allocator));
+
+        auto* textureData           = textures.data();
+        const size_t textureCount   = textures.size();
         
-        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textures.data());
-        textureAllocator.free(static_cast<GLsizei>(textures.size()));
+        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData + textureCount);
+        textureAllocator.free(static_cast<GLsizei>(textureCount));
+    }
+
+    void generateMeshes(Allocator* allocator, size_t count, ConstMesh* meshes)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MutableMemoryView memoryView(allocatorSpan);
+        auto buffers = memoryView.read_contiguous_array<unsigned int>(getBufferOffset(allocator));
+
+        auto* bufferData            = buffers.data();
+        const size_t bufferCount    = buffers.size();
+        
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData, bufferData + bufferCount);
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            ConstMesh::BufferIndices& bufferIndices = meshes[i].bufferIndices;
+
+            bufferIndices.vertex    = bufferAllocator.get();
+            bufferIndices.triangle  = bufferAllocator.get();
+        }
     }
 
     void uploadMesh(const ConstMesh* mesh)
