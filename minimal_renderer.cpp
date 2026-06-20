@@ -1,6 +1,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "renderer.h"
+
 int main(int argc, char** argv)
 {
     if (glfwInit() != GLFW_TRUE)
@@ -17,6 +19,7 @@ int main(int argc, char** argv)
     if (!window)
     {
         glfwTerminate();
+
         return 2;
     }
 
@@ -24,19 +27,25 @@ int main(int argc, char** argv)
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
+        glfwDestroyWindow(window);
         glfwTerminate();
+
         return 3;
     }
+
+    renderer::Allocator renderAllocator;
+    renderer::allocate(&renderAllocator);
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        // render
+        renderer::render(&renderAllocator);
 
         glfwSwapBuffers(window);
     }
     
+    glfwDestroyWindow(window);
     glfwTerminate();
 
     return 0;
