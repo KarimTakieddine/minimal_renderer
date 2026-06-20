@@ -1,9 +1,6 @@
-#include <span>
-
 #include <memory_cursor.hpp>
 #include <memory_view.hpp>
 
-#include "locations_descriptor.h"
 #include "renderer.h"
 
 namespace renderer

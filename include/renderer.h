@@ -5,6 +5,7 @@
 
 #include <bump_allocator.hpp>
 
+#include "locations_descriptor.h"
 #include "mesh.hpp"
 #include "shader.h"
 
@@ -20,6 +21,8 @@ namespace renderer
     uint64_t getTextureOffset(const Allocator* allocator);
     uint64_t getShaderOffset(const Allocator* allocator);
     uint64_t getShaderProgramOffset(const Allocator* allocator);
+    // TODO(Karim):
+    uint64_t getLocationsDescriptorOffset(const Allocator* allocator);
     uint64_t getMeshDataOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
@@ -43,6 +46,11 @@ namespace renderer
     void allocateShaderPrograms(Allocator* allocator, size_t count, unsigned int* programs);
     void compileShaderProgram(unsigned int program, size_t shaderCount, const Shader* shaders);
     void freeShaders(Allocator* allocator);
+
+    // TODO(Karim):
+
+    void allocateLocationsDescriptor(Allocator* allocator);
+    void setShaderLocations(unsigned int program, LocationsDescriptor* descriptor);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsState();
