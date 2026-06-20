@@ -147,8 +147,6 @@ namespace renderer
 
     void render(const Allocator* allocator)
     {
-        uploadMeshes(allocator);
-
         // const auto* allocatorStart = allocator->peek();
         // std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocatorStart), ALLOCATOR_SIZE);
 
