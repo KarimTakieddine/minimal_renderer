@@ -6,15 +6,56 @@
 #include "locations_descriptor.h"
 #include "renderer.h"
 
-namespace
-{
-    constexpr size_t ALLOCATOR_SIZE         = 1 << 13;
-    constexpr uint64_t MEMORY_ALIGNMENT     = 16;
-    constexpr uint64_t MESH_SECTION_SIZE    = 1 << 10;
-}
-
 namespace renderer
 {
+    uint64_t getBufferOffset(const Allocator* allocator)
+    {
+        return 0;
+    }
+
+    uint64_t getVertexArrayOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor;
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(
+            static_cast<const std::byte*>(allocator->peek()),
+            ALLOCATOR_SIZE);
+        
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto bufferCount = allocatorMemoryView.read_object<uint64_t>(getBufferOffset(allocator));
+        cursor.step_array<unsigned int>(*bufferCount.data());
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getTextureOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getVertexArrayOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(
+            static_cast<const std::byte*>(allocator->peek()),
+            ALLOCATOR_SIZE);
+        
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto vertexArrayCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step_array<unsigned int>(*vertexArrayCount.data());
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getMeshDataOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getTextureOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+     
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto textureCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step_array<unsigned int>(*textureCount.data());
+
+        return cursor.getOffset();
+    }
+
     void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes)
     {
         auto* meshCount = allocator->requestMemory<uint64_t>(count);
@@ -45,11 +86,11 @@ namespace renderer
 
     void uploadMeshes(const Allocator* allocator)
     {
-        MemoryCursor<MEMORY_ALIGNMENT> meshCursor;
-        
-        std::span<const std::byte, MESH_SECTION_SIZE> meshSpan(
-            static_cast<const std::byte*>(allocator->peek()),
-            MESH_SECTION_SIZE);
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> meshSpan(
+            reinterpret_cast<const std::byte*>(allocator->peek()),
+            ALLOCATOR_SIZE);
 
         ConstMemoryView meshMemoryView(meshSpan);
 
@@ -77,6 +118,12 @@ namespace renderer
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
+        
+        MemoryCursor<MEMORY_ALIGNMENT> cursor;
+
+        allocateBuffers(allocator, 3);
+        allocateVertexArrays(allocator, 1);
+        allocateTextures(allocator, 1);
 
         // auto* locationsDescriptor = allocator->requestMemory<LocationsDescriptor>();
 
