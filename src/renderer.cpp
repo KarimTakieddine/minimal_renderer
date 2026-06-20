@@ -38,15 +38,5 @@ namespace renderer
         const auto locationsDescriptor =
             allocatorMemoryView.read_object<LocationsDescriptor>(memoryCursor.getOffset());
         memoryCursor.step<LocationsDescriptor>();
-
-        const auto locationsDescriptor2 =
-            allocatorMemoryView.read_object<LocationsDescriptor>(memoryCursor.getOffset());
-        memoryCursor.step<LocationsDescriptor>();
-
-        int c = locationsDescriptor.data()->colorLocation;
-        int d = locationsDescriptor.data()->materialColorLocation;
-        int e = locationsDescriptor.data()->positionLocation;
-        int f = locationsDescriptor.data()->uvLocation;
-        int g = locationsDescriptor.data()->transformLocation;
     }
 }
