@@ -6,6 +6,7 @@
 #include <bump_allocator.hpp>
 
 #include "mesh.hpp"
+#include "shader.h"
 
 namespace renderer
 {
@@ -17,6 +18,8 @@ namespace renderer
     uint64_t getBufferOffset(const Allocator* allocator);
     uint64_t getVertexArrayOffset(const Allocator* allocator);
     uint64_t getTextureOffset(const Allocator* allocator);
+    uint64_t getShaderOffset(const Allocator* allocator);
+    uint64_t getShaderProgramOffset(const Allocator* allocator);
     uint64_t getMeshDataOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
@@ -32,6 +35,18 @@ namespace renderer
     void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes);
     void uploadMeshes(const Allocator* allocator);
     void uploadMesh(const ConstMesh* mesh);
+
+    void generateShaders(size_t count, Shader* shaders);
+    void compileShaders(size_t count, Shader* shaders, const char* const* paths);
+    void allocateShaders(Allocator* allocator, size_t count, const Shader* shaders);
+    void generateShaderPrograms(size_t count, unsigned int* programs);
+    void allocateShaderPrograms(Allocator* allocator, size_t count, unsigned int* programs);
+    void compileShaderProgram(unsigned int program, size_t shaderCount, const Shader* shaders);
+    void freeShaders(Allocator* allocator);
+
     void allocate(Allocator* allocator);
+    void initializeGraphicsState();
+    void clearFrameBuffer();
+
     void render(const Allocator* allocator);
 }

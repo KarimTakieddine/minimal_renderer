@@ -43,7 +43,7 @@ namespace renderer
         return cursor.getOffset();
     }
 
-    uint64_t getMeshDataOffset(const Allocator* allocator)
+    uint64_t getShaderOffset(const Allocator* allocator)
     {
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getTextureOffset(allocator));
 
@@ -52,6 +52,32 @@ namespace renderer
         ConstMemoryView allocatorMemoryView(allocatorSpan);
         const auto textureCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
         cursor.step_array<unsigned int>(*textureCount.data());
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getShaderProgramOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getShaderOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+     
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto shaderCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step_array<Shader>(*shaderCount.data());
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getMeshDataOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getShaderProgramOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+     
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto shaderProgramCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step_array<unsigned int>(*shaderProgramCount.data());
 
         return cursor.getOffset();
     }
@@ -115,6 +141,28 @@ namespace renderer
         }
     }
 
+    void allocateShaders(Allocator* allocator, size_t count, const Shader* shaders)
+    {
+        auto* shaderCount   = allocator->requestMemory<uint64_t>(count);
+        auto* shaderData    = allocator->requestMemoryArray<Shader>(count);
+
+        for (size_t i = 0; i < *shaderCount; ++i)
+        {
+            shaderData[i] = shaders[i];
+        }
+    }
+
+    void allocateShaderPrograms(Allocator* allocator, size_t count, unsigned int* programs)
+    {
+        auto* programCount  = allocator->requestMemory<uint64_t>(count);
+        auto* programData   = allocator->requestMemoryArray<unsigned int>(count);
+
+        for (size_t i = 0; i < *programCount; ++i)
+        {
+            programData[i] = programs[i];
+        }
+    }
+
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
@@ -124,6 +172,26 @@ namespace renderer
         allocateBuffers(allocator, 3);
         allocateVertexArrays(allocator, 1);
         allocateTextures(allocator, 1);
+
+        Shader shaders[2] = {
+            { Shader::Type::VERTEX },
+            { Shader::Type::FRAGMENT }
+        };
+
+        const char* shaderFiles[2] = {
+            "./shaders/3d_transform_vertex.slh",
+            "./shaders/3d_transform_fragment.slh"
+        };
+
+        generateShaders(2, shaders);
+        compileShaders(2, shaders, shaderFiles);
+        allocateShaders(allocator, 2, shaders);
+
+        unsigned int shaderPrograms[1] = { 0 };
+
+        generateShaderPrograms(1, shaderPrograms);
+        allocateShaderPrograms(allocator, 1, shaderPrograms);
+        compileShaderProgram(shaderPrograms[0], 2, shaders);
 
         // auto* locationsDescriptor = allocator->requestMemory<LocationsDescriptor>();
 

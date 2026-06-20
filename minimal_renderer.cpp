@@ -36,16 +36,19 @@ int main(int argc, char** argv)
     renderer::Allocator renderAllocator;
     renderer::allocate(&renderAllocator);
     renderer::uploadMeshes(&renderAllocator);
+    renderer::initializeGraphicsState();
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
+        renderer::clearFrameBuffer();
         renderer::render(&renderAllocator);
 
         glfwSwapBuffers(window);
     }
 
+    renderer::freeShaders(&renderAllocator);
     renderer::freeTextures(&renderAllocator);
     renderer::freeVertexArrays(&renderAllocator);
     renderer::freeBuffers(&renderAllocator);

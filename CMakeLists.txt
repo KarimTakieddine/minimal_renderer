@@ -14,6 +14,7 @@ Project(${PROJECT_NAME})
 
 list(APPEND SOURCES
     ${GLAD_DIR}/${SRC_DIR}/glad.c
+    ${SRC_DIR}/platform_arch_linux.cpp
     ${SRC_DIR}/renderer.cpp
     ${SRC_DIR}/renderer_opengl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/minimal_renderer.cpp)
