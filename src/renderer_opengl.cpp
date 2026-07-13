@@ -7,8 +7,6 @@
 #include "platform.h"
 #include "renderer.h"
 
-#include <iostream>
-
 namespace
 {
     constexpr size_t MAX_SHADER_FILE_SIZE = 1 << 10;
@@ -294,5 +292,38 @@ namespace renderer
 
             glDeleteProgram(program);
         }
+    }
+
+    bool setShaderLocations(Allocator* allocator, size_t programIndex, size_t descriptorIndex)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MutableMemoryView memoryView(allocatorSpan);
+
+        const auto shaderPrograms = memoryView.read_contiguous_array<unsigned int>(getShaderProgramOffset(allocator));
+
+        if (programIndex >= shaderPrograms.size())
+        {
+            return false;
+        }
+
+        const GLuint shaderProgram = shaderPrograms.data()[programIndex];
+
+        auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+
+        if (descriptorIndex >= locationsDescriptors.size())
+        {
+            return false;
+        }
+
+        auto* locationsDescriptor = locationsDescriptors.data() + descriptorIndex;
+
+        locationsDescriptor->positionLocation       = glGetAttribLocation(shaderProgram, "position");
+        locationsDescriptor->colorLocation          = glGetAttribLocation(shaderProgram, "color");
+        locationsDescriptor->uvLocation             = glGetAttribLocation(shaderProgram, "uv");
+        locationsDescriptor->transformLocation      = glGetUniformLocation(shaderProgram, "transform");
+        locationsDescriptor->materialColorLocation  = glGetUniformLocation(shaderProgram, "materialColor");
+
+        return true;
     }
 }

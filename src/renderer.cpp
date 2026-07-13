@@ -1,3 +1,5 @@
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <memory_cursor.hpp>
 #include <memory_view.hpp>
 
@@ -76,6 +78,57 @@ namespace renderer
         const auto shaderProgramCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
         cursor.step_array<unsigned int>(*shaderProgramCount.data());
 
+        return cursor.getOffset();
+    }
+
+    uint64_t getLocationsDescriptorOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getMeshDataOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto meshCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step<uint64_t>();
+
+        for (uint64_t i = 0; i < *meshCount.data(); ++i)
+        {
+            cursor.step<ConstMesh::BufferIndices>();
+
+            const auto vertexCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+            cursor.step_array<Vertex>(*vertexCount.data());
+
+            const auto triangleCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+            cursor.step_array<unsigned int>(*triangleCount.data());
+        }
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getCameraEyeOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getLocationsDescriptorOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto locationsDescriptorCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
+        cursor.step_array<LocationsDescriptor>(*locationsDescriptorCount.data());
+
+        return cursor.getOffset();
+    }
+
+    uint64_t getCameraFrustumOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
+        cursor.step<Camera::Eye>();
+        return cursor.getOffset();
+    }
+
+    uint64_t getCameraOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
+        cursor.step<Camera::Frustum>();
         return cursor.getOffset();
     }
 
@@ -167,6 +220,65 @@ namespace renderer
         allocator->requestMemoryArray<unsigned int>(count);
     }
 
+    void allocateLocationsDescriptors(Allocator* allocator, size_t count)
+    {
+        allocator->requestMemory<uint64_t>(count);
+        allocator->requestMemoryArray<LocationsDescriptor>(count);
+    }
+
+    void allocateCamera(Allocator* allocator)
+    {
+        allocator->requestMemory<Camera::Eye>();
+        allocator->requestMemory<Camera::Frustum>();
+        allocator->requestMemory<Camera>();
+    }
+
+    void setCameraEye(Allocator* allocator, const Camera::Eye* eye)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
+
+        MutableMemoryView memoryView(allocatorSpan);
+        auto* cameraEye = memoryView.read_object<Camera::Eye>(cursor.getOffset()).data();
+
+        *cameraEye = *eye;
+    }
+
+    void setCameraFrustum(Allocator* allocator, const Camera::Frustum* frustum)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
+
+        MutableMemoryView memoryView(allocatorSpan);
+        auto* cameraFrustum = memoryView.read_object<Camera::Frustum>(cursor.getOffset()).data();
+
+        *cameraFrustum = *frustum;
+    }
+
+    void updateCamera(Allocator* allocator)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MemoryCursor<MEMORY_ALIGNMENT> cameraDataCursor(getCameraEyeOffset(allocator));
+
+        ConstMemoryView cameraDataView(allocatorSpan);
+
+        const auto* cameraEye = cameraDataView.read_object<Camera::Eye>(cameraDataCursor.getOffset()).data();
+        cameraDataCursor.step<Camera::Eye>();
+
+        const auto* cameraFrustum = cameraDataView.read_object<Camera::Frustum>(cameraDataCursor.getOffset()).data();
+        cameraDataCursor.step<Camera::Frustum>();
+
+        MutableMemoryView cameraView(allocatorSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> cameraCursor(getCameraOffset(allocator));
+        auto* camera = cameraView.read_object<Camera>(cameraCursor.getOffset()).data();
+
+        camera->projection  = glm::perspective(glm::radians(cameraFrustum->fov), cameraFrustum->aspect, cameraFrustum->near, cameraFrustum->far);
+        camera->view        = glm::lookAtRH(cameraEye->position, cameraEye->target, cameraEye->up);
+    }
+
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
@@ -186,6 +298,8 @@ namespace renderer
         unsigned int quadTriangles[6]   = { 0, 2, 1, 0, 3, 2 };
         ConstMesh meshList[1]           = { { quadVertices, quadTriangles, 4, 6 } };
         allocateMeshes(allocator, 1, meshList);
+        allocateLocationsDescriptors(allocator, 1);
+        allocateCamera(allocator);
     }
 
     void initializeGraphicsResources(Allocator* allocator)
@@ -206,6 +320,25 @@ namespace renderer
 
         generateMeshes(allocator);
         uploadMeshes(allocator);
+
+        setShaderLocations(allocator, 0, 0);
+
+        Camera::Eye cameraEye = {
+            .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
+            .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
+            .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
+        };
+        setCameraEye(allocator, &cameraEye);
+
+        Camera::Frustum cameraFrustum = {
+            .fov    = 45.0f,
+            .aspect = 1920.0f / 1080.0f,
+            .near   = 1.0f,
+            .far    = 100.0f
+        };
+        setCameraFrustum(allocator, &cameraFrustum);
+
+        updateCamera(allocator);
     }
 
     void freeGraphicsResources(Allocator* allocator)

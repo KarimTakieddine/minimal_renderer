@@ -5,6 +5,7 @@
 
 #include <bump_allocator.hpp>
 
+#include "camera.h"
 #include "locations_descriptor.h"
 #include "mesh.hpp"
 #include "shader.h"
@@ -21,9 +22,11 @@ namespace renderer
     uint64_t getTextureOffset(const Allocator* allocator);
     uint64_t getShaderOffset(const Allocator* allocator);
     uint64_t getShaderProgramOffset(const Allocator* allocator);
-    // TODO(Karim):
-    uint64_t getLocationsDescriptorOffset(const Allocator* allocator);
     uint64_t getMeshDataOffset(const Allocator* allocator);
+    uint64_t getLocationsDescriptorOffset(const Allocator* allocator);
+    uint64_t getCameraEyeOffset(const Allocator* allocator);
+    uint64_t getCameraFrustumOffset(const Allocator* allocator);
+    uint64_t getCameraOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
     void generateBuffers(Allocator* allocator);
@@ -49,10 +52,13 @@ namespace renderer
     void compileShaderProgram(const Allocator* allocator, size_t index, size_t shaderCount, const size_t* shaderIndices);
     void freeShaders(Allocator* allocator);
 
-    // TODO(Karim):
+    void allocateLocationsDescriptors(Allocator* allocator, size_t count);
+    bool setShaderLocations(Allocator* allocator, size_t programIndex, size_t descriptorIndex);
 
-    void allocateLocationsDescriptor(Allocator* allocator);
-    void setShaderLocations(unsigned int program, LocationsDescriptor* descriptor);
+    void allocateCamera(Allocator* allocator);
+    void setCameraEye(Allocator* allocator, const Camera::Eye* eye);
+    void setCameraFrustum(Allocator* allocator, const Camera::Frustum* frustum);
+    void updateCamera(Allocator* allocator);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsResources(Allocator* allocator);
