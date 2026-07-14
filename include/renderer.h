@@ -27,6 +27,7 @@ namespace renderer
     uint64_t getCameraEyeOffset(const Allocator* allocator);
     uint64_t getCameraFrustumOffset(const Allocator* allocator);
     uint64_t getCameraOffset(const Allocator* allocator);
+    uint64_t getUniformBufferOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
     void generateBuffers(Allocator* allocator);
@@ -59,6 +60,9 @@ namespace renderer
     void setCameraEye(Allocator* allocator, const Camera::Eye* eye);
     void setCameraFrustum(Allocator* allocator, const Camera::Frustum* frustum);
     void updateCamera(Allocator* allocator);
+
+    void allocateUniformBuffer(Allocator* allocator, size_t segmentCount);
+    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* const* names);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsResources(Allocator* allocator);

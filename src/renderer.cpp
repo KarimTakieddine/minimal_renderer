@@ -4,6 +4,7 @@
 #include <memory_view.hpp>
 
 #include "renderer.h"
+#include "uniform_buffer_segment.h"
 
 namespace renderer
 {
@@ -129,6 +130,13 @@ namespace renderer
     {
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
         cursor.step<Camera::Frustum>();
+        return cursor.getOffset();
+    }
+
+    uint64_t getUniformBufferOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraOffset(allocator));
+        cursor.step<Camera>();
         return cursor.getOffset();
     }
 
@@ -279,6 +287,13 @@ namespace renderer
         camera->view        = glm::lookAtRH(cameraEye->position, cameraEye->target, cameraEye->up);
     }
 
+    void allocateUniformBuffer(Allocator* allocator, size_t segmentCount)
+    {
+        allocator->requestMemory<unsigned int>();
+        allocator->requestMemory<uint64_t>(segmentCount);
+        allocator->requestMemoryArray<UniformBufferSegment>(segmentCount);
+    }
+
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
@@ -300,6 +315,7 @@ namespace renderer
         allocateMeshes(allocator, 1, meshList);
         allocateLocationsDescriptors(allocator, 1);
         allocateCamera(allocator);
+        allocateUniformBuffer(allocator, 4);
     }
 
     void initializeGraphicsResources(Allocator* allocator)
@@ -339,6 +355,15 @@ namespace renderer
         setCameraFrustum(allocator, &cameraFrustum);
 
         updateCamera(allocator);
+
+        const char* cameraUniformNames[4] = {
+            "A",
+            "B",
+            "C",
+            "D"
+        };
+
+        generateUniformBuffer(allocator, 0, cameraUniformNames);
     }
 
     void freeGraphicsResources(Allocator* allocator)
