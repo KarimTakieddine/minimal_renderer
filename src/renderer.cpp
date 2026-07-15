@@ -3,6 +3,8 @@
 #include <memory_cursor.hpp>
 #include <memory_view.hpp>
 
+#include "render_batch.h"
+#include "render_entity.h"
 #include "renderer.h"
 #include "uniform_buffer_segment.h"
 
@@ -144,6 +146,19 @@ namespace renderer
     {
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
         cursor.step<unsigned int>();
+        return cursor.getOffset();
+    }
+
+    uint64_t getRenderBatchOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformSegmentOffset(allocator));
+
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView allocatorMemoryView(allocatorSpan);
+        const auto uniformSegments = allocatorMemoryView.read_contiguous_array<UniformBufferSegment>(cursor.getOffset());
+        cursor.step_array<UniformBufferSegment>(uniformSegments.size());
+
         return cursor.getOffset();
     }
 
@@ -324,6 +339,20 @@ namespace renderer
         return true;
     }
 
+    void allocateRenderBatches(Allocator* allocator, size_t count, const size_t* entityCounts)
+    {
+        allocator->requestMemory<uint64_t>(count);
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            allocator->requestMemory<RenderBatch>();
+
+            const size_t entityCount = entityCounts[i];
+            allocator->requestMemory<uint64_t>(entityCount);
+            allocator->requestMemoryArray<RenderEntity>(entityCount);
+        }
+    }
+
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
@@ -346,6 +375,9 @@ namespace renderer
         allocateLocationsDescriptors(allocator, 1);
         allocateCamera(allocator);
         allocateUniformBuffer(allocator, 4);
+
+        const size_t entityCount = 4;
+        allocateRenderBatches(allocator, 1, &entityCount);
     }
 
     void initializeGraphicsResources(Allocator* allocator)
@@ -395,6 +427,9 @@ namespace renderer
 
         generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
         mapCameraUniforms(allocator);
+
+        generateRenderBatch(allocator, 0, 0, 0);
+        setVertexLayout(allocator, 0, 0, 0);
     }
 
     void freeGraphicsResources(Allocator* allocator)

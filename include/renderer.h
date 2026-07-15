@@ -29,6 +29,7 @@ namespace renderer
     uint64_t getCameraOffset(const Allocator* allocator);
     uint64_t getUniformBufferOffset(const Allocator* allocator);
     uint64_t getUniformSegmentOffset(const Allocator* allocator);
+    uint64_t getRenderBatchOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
     void generateBuffers(Allocator* allocator);
@@ -65,6 +66,10 @@ namespace renderer
     void allocateUniformBuffer(Allocator* allocator, size_t segmentCount);
     bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names);
     bool mapCameraUniforms(Allocator* allocator);
+
+    void allocateRenderBatches(Allocator* allocator, size_t count, const size_t* entityCounts);
+    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex);
+    bool setVertexLayout(const Allocator* allocator, size_t batchIndex, size_t meshIndex, size_t descriptorIndex);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsResources(Allocator* allocator);

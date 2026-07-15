@@ -5,6 +5,8 @@
 
 #include "opengl_allocator.h"
 #include "platform.h"
+#include "render_batch.h"
+#include "render_entity.h"
 #include "renderer.h"
 #include "uniform_buffer_segment.h"
 
@@ -440,5 +442,129 @@ namespace renderer
             glBufferSubData(GL_UNIFORM_BUFFER, segment->offset, segment->stride, segment->data);
         }
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    }
+
+    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex)
+    {
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        MutableMemoryView memoryView(allocatorSpan);
+
+        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
+        if (programIndex >= shaderPrograms.size())
+        {
+            return false;
+        }
+
+        const GLuint shaderProgram = shaderPrograms.data()[programIndex];
+
+        auto vertexArrays = memoryView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
+        if (vertexArrayIndex >= vertexArrays.size())
+        {
+            return false;
+        }
+
+        const GLuint vertexArray = vertexArrays.data()[vertexArrayIndex];
+
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+
+        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+
+        if (batchIndex >= *batchCount.data())
+        {
+            return false;
+        }
+
+        batchCursor.step<uint64_t>();
+
+        for (size_t i = 0; i < batchIndex; ++i)
+        {
+            batchCursor.step<RenderBatch>();
+
+            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            batchCursor.step_array<RenderEntity>(entities.size());
+        }
+
+        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+
+        batch->vertexArray      = vertexArray;
+        batch->shaderProgram    = shaderProgram;
+
+        return true;
+    }
+
+    bool setVertexLayout(const Allocator* allocator, size_t batchIndex, size_t meshIndex, size_t descriptorIndex)
+    {
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView memoryView(allocatorSpan);
+
+        const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+        if (descriptorIndex >= locationsDescriptors.size())
+        {
+            return false;
+        }
+
+        const auto* locationsDescriptor = locationsDescriptors.data() + descriptorIndex;
+
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
+
+        const auto meshCount = memoryView.read_object<uint64_t>(meshCursor.getOffset());
+        if (meshIndex >= *meshCount.data())
+        {
+            return false;
+        }
+
+        meshCursor.step<uint64_t>();
+
+        for (size_t i = 0; i < meshIndex; ++i)
+        {
+            meshCursor.step<ConstMesh::BufferIndices>();
+
+            auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            meshCursor.step_array<Vertex>(vertices.size());
+
+            auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+            meshCursor.step_array<GLuint>(triangles.size());
+        }
+
+        const auto* bufferIndices = memoryView.read_object<ConstMesh::BufferIndices>(meshCursor.getOffset()).data();
+
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+
+        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+
+        if (batchIndex >= *batchCount.data())
+        {
+            return false;
+        }
+
+        batchCursor.step<uint64_t>();
+
+        for (size_t i = 0; i < batchIndex; ++i)
+        {
+            batchCursor.step<RenderBatch>();
+
+            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            batchCursor.step_array<RenderEntity>(entities.size());
+        }
+
+        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+
+        glUseProgram(batch->shaderProgram);
+        glBindVertexArray(batch->vertexArray);
+        glBindBuffer(GL_ARRAY_BUFFER, bufferIndices->vertex);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferIndices->triangle);
+
+        glEnableVertexAttribArray(locationsDescriptor->positionLocation);
+        glVertexAttribPointer(locationsDescriptor->positionLocation, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
+
+        glEnableVertexAttribArray(locationsDescriptor->colorLocation);
+        glVertexAttribPointer(locationsDescriptor->colorLocation, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(sizeof(glm::vec3)));
+
+        glEnableVertexAttribArray(locationsDescriptor->uvLocation);
+        glVertexAttribPointer(locationsDescriptor->uvLocation, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(2 * sizeof(glm::vec3)));
+
+        return true;
     }
 }
