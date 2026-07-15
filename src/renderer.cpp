@@ -3,9 +3,15 @@
 #include <memory_cursor.hpp>
 #include <memory_view.hpp>
 
+#include "camera.h"
+#include "eye.h"
+#include "frustum.h"
+#include "locations_descriptor.h"
+#include "mesh.hpp"
 #include "render_batch.h"
 #include "render_entity.h"
 #include "renderer.h"
+#include "shader.h"
 #include "uniform_buffer_segment.h"
 
 namespace renderer
@@ -124,14 +130,14 @@ namespace renderer
     uint64_t getCameraFrustumOffset(const Allocator* allocator)
     {
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
-        cursor.step<Camera::Eye>();
+        cursor.step<Eye>();
         return cursor.getOffset();
     }
 
     uint64_t getCameraOffset(const Allocator* allocator)
     {
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
-        cursor.step<Camera::Frustum>();
+        cursor.step<Frustum>();
         return cursor.getOffset();
     }
 
@@ -258,31 +264,31 @@ namespace renderer
 
     void allocateCamera(Allocator* allocator)
     {
-        allocator->requestMemory<Camera::Eye>();
-        allocator->requestMemory<Camera::Frustum>();
+        allocator->requestMemory<Eye>();
+        allocator->requestMemory<Frustum>();
         allocator->requestMemory<Camera>();
     }
 
-    void setCameraEye(Allocator* allocator, const Camera::Eye* eye)
+    void setCameraEye(Allocator* allocator, const Eye* eye)
     {
         std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
 
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
 
         MutableMemoryView memoryView(allocatorSpan);
-        auto* cameraEye = memoryView.read_object<Camera::Eye>(cursor.getOffset()).data();
+        auto* cameraEye = memoryView.read_object<Eye>(cursor.getOffset()).data();
 
         *cameraEye = *eye;
     }
 
-    void setCameraFrustum(Allocator* allocator, const Camera::Frustum* frustum)
+    void setCameraFrustum(Allocator* allocator, const Frustum* frustum)
     {
         std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
 
         MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
 
         MutableMemoryView memoryView(allocatorSpan);
-        auto* cameraFrustum = memoryView.read_object<Camera::Frustum>(cursor.getOffset()).data();
+        auto* cameraFrustum = memoryView.read_object<Frustum>(cursor.getOffset()).data();
 
         *cameraFrustum = *frustum;
     }
@@ -295,11 +301,11 @@ namespace renderer
 
         ConstMemoryView cameraDataView(allocatorSpan);
 
-        const auto* cameraEye = cameraDataView.read_object<Camera::Eye>(cameraDataCursor.getOffset()).data();
-        cameraDataCursor.step<Camera::Eye>();
+        const auto* cameraEye = cameraDataView.read_object<Eye>(cameraDataCursor.getOffset()).data();
+        cameraDataCursor.step<Eye>();
 
-        const auto* cameraFrustum = cameraDataView.read_object<Camera::Frustum>(cameraDataCursor.getOffset()).data();
-        cameraDataCursor.step<Camera::Frustum>();
+        const auto* cameraFrustum = cameraDataView.read_object<Frustum>(cameraDataCursor.getOffset()).data();
+        cameraDataCursor.step<Frustum>();
 
         MutableMemoryView cameraView(allocatorSpan);
         MemoryCursor<MEMORY_ALIGNMENT> cameraCursor(getCameraOffset(allocator));
@@ -401,14 +407,14 @@ namespace renderer
 
         setShaderLocations(allocator, 0, 0);
 
-        Camera::Eye cameraEye = {
+        Eye cameraEye = {
             .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
             .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
             .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
         };
         setCameraEye(allocator, &cameraEye);
 
-        Camera::Frustum cameraFrustum = {
+        Frustum cameraFrustum = {
             .fov    = 45.0f,
             .aspect = 1920.0f / 1080.0f,
             .near   = 1.0f,
@@ -428,8 +434,8 @@ namespace renderer
         generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
         mapCameraUniforms(allocator);
 
-        generateRenderBatch(allocator, 0, 0, 0);
-        setVertexLayout(allocator, 0, 0, 0);
+        generateRenderBatch(allocator, 0, 0, 0, 0);
+        setVertexLayout(allocator, 0, 0);
     }
 
     void freeGraphicsResources(Allocator* allocator)
@@ -440,17 +446,42 @@ namespace renderer
         freeBuffers(allocator);
     }
 
+    void renderBatches(const Allocator* allocator)
+    {
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView memoryView(allocatorSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+
+        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+        batchCursor.step<uint64_t>();
+
+        for (uint64_t i = 0; i < *batchCount.data(); ++i)
+        {
+            const auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+
+            const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+            const auto* locationsDescriptor = locationsDescriptors.data() + batch->descriptorIndex;
+            
+            renderBatch(batch);
+
+            batchCursor.step<RenderBatch>();
+
+            const auto renderEntities   = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            const size_t entityCount    = renderEntities.size();
+
+            for (size_t j = 0; j < entityCount; ++j)
+            {
+                renderEntity(renderEntities.data() + j, locationsDescriptor, batch->elememtCount);
+            }
+
+            batchCursor.step_array<RenderEntity>(entityCount);
+        }
+    }
+
     void render(const Allocator* allocator)
     {
-        // const auto* allocatorStart = allocator->peek();
-        // std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocatorStart), ALLOCATOR_SIZE);
-
-        // auto memoryCursor = MemoryCursor<MEMORY_ALIGNMENT>();
-
-        // ConstMemoryView allocatorMemoryView(allocatorSpan);
-        
-        // const auto locationsDescriptor =
-        //     allocatorMemoryView.read_object<LocationsDescriptor>(memoryCursor.getOffset());
-        // memoryCursor.step<LocationsDescriptor>();
+        uploadUniformBuffer(allocator);
+        renderBatches(allocator);
     }
 }

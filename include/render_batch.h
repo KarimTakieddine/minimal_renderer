@@ -1,10 +1,14 @@
 #pragma once
 
+#include <cstddef>
+
 namespace renderer
 {
     struct RenderBatch
     {
-        unsigned int vertexArray    { 0 };
+        size_t descriptorIndex      { 0 };
         unsigned int shaderProgram  { 0 };
+        unsigned int vertexArray    { 0 };
+        int elememtCount            { 0 };
     };
 }

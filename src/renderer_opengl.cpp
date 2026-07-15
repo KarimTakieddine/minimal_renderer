@@ -1,13 +1,16 @@
 #include <glad/glad.h>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <memory_cursor.hpp>
 #include <memory_view.hpp>
 
+#include "locations_descriptor.h"
 #include "opengl_allocator.h"
 #include "platform.h"
 #include "render_batch.h"
 #include "render_entity.h"
 #include "renderer.h"
+#include "shader.h"
 #include "uniform_buffer_segment.h"
 
 namespace
@@ -444,7 +447,7 @@ namespace renderer
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 
-    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex)
+    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex)
     {
         std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
 
@@ -487,25 +490,18 @@ namespace renderer
 
         auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
+        batch->descriptorIndex  = descriptorIndex;
         batch->vertexArray      = vertexArray;
         batch->shaderProgram    = shaderProgram;
 
         return true;
     }
 
-    bool setVertexLayout(const Allocator* allocator, size_t batchIndex, size_t meshIndex, size_t descriptorIndex)
+    bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex)
     {
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
 
-        ConstMemoryView memoryView(allocatorSpan);
-
-        const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
-        if (descriptorIndex >= locationsDescriptors.size())
-        {
-            return false;
-        }
-
-        const auto* locationsDescriptor = locationsDescriptors.data() + descriptorIndex;
+        MutableMemoryView memoryView(allocatorSpan);
 
         MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
 
@@ -521,14 +517,20 @@ namespace renderer
         {
             meshCursor.step<ConstMesh::BufferIndices>();
 
-            auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
             meshCursor.step_array<Vertex>(vertices.size());
 
-            auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+            const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
             meshCursor.step_array<GLuint>(triangles.size());
         }
 
         const auto* bufferIndices = memoryView.read_object<ConstMesh::BufferIndices>(meshCursor.getOffset()).data();
+        meshCursor.step<ConstMesh::BufferIndices>();
+
+        const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+        meshCursor.step_array<Vertex>(vertices.size());
+
+        const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
 
         MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
 
@@ -551,6 +553,18 @@ namespace renderer
 
         auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
+        batch->elememtCount = static_cast<int>(triangles.size());
+
+        const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+        const size_t descriptorIndex    = batch->descriptorIndex;
+
+        if (descriptorIndex >= locationsDescriptors.size())
+        {
+            return false;
+        }
+
+        const auto* locationsDescriptor = locationsDescriptors.data() + descriptorIndex;
+
         glUseProgram(batch->shaderProgram);
         glBindVertexArray(batch->vertexArray);
         glBindBuffer(GL_ARRAY_BUFFER, bufferIndices->vertex);
@@ -566,5 +580,19 @@ namespace renderer
         glVertexAttribPointer(locationsDescriptor->uvLocation, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(2 * sizeof(glm::vec3)));
 
         return true;
+    }
+
+    void renderBatch(const RenderBatch* batch)
+    {
+        glUseProgram(batch->shaderProgram);
+        glBindVertexArray(batch->vertexArray);
+    }
+
+    void renderEntity(const RenderEntity* entity, const LocationsDescriptor* descriptor, int elementCount)
+    {
+        glUniformMatrix4fv(descriptor->transformLocation, 3, GL_FALSE, glm::value_ptr(entity->transform.localToWorld));
+        glUniform4fv(descriptor->materialColorLocation, 1, glm::value_ptr(entity->material.color));
+
+        glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_INT, nullptr);
     }
 }

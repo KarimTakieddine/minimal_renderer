@@ -5,13 +5,17 @@
 
 #include <bump_allocator.hpp>
 
-#include "camera.h"
-#include "locations_descriptor.h"
 #include "mesh.hpp"
-#include "shader.h"
 
 namespace renderer
 {
+    struct LocationsDescriptor;
+    struct Eye;
+    struct Frustum;
+    struct RenderBatch;
+    struct RenderEntity;
+    struct Shader;
+
     static constexpr size_t ALLOCATOR_SIZE      = 1 << 13;
     static constexpr uint64_t MEMORY_ALIGNMENT  = 16;
 
@@ -59,8 +63,8 @@ namespace renderer
     bool setShaderLocations(Allocator* allocator, size_t programIndex, size_t descriptorIndex);
 
     void allocateCamera(Allocator* allocator);
-    void setCameraEye(Allocator* allocator, const Camera::Eye* eye);
-    void setCameraFrustum(Allocator* allocator, const Camera::Frustum* frustum);
+    void setCameraEye(Allocator* allocator, const Eye* eye);
+    void setCameraFrustum(Allocator* allocator, const Frustum* frustum);
     void updateCamera(Allocator* allocator);
 
     void allocateUniformBuffer(Allocator* allocator, size_t segmentCount);
@@ -68,8 +72,8 @@ namespace renderer
     bool mapCameraUniforms(Allocator* allocator);
 
     void allocateRenderBatches(Allocator* allocator, size_t count, const size_t* entityCounts);
-    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex);
-    bool setVertexLayout(const Allocator* allocator, size_t batchIndex, size_t meshIndex, size_t descriptorIndex);
+    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex);
+    bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsResources(Allocator* allocator);
@@ -78,5 +82,8 @@ namespace renderer
     void clearFrameBuffer();
 
     void uploadUniformBuffer(const Allocator* allocator);
+    void renderBatch(const RenderBatch* batch);
+    void renderEntity(const RenderEntity* entity, const LocationsDescriptor* descriptor, int elementCount);
+    void renderBatches(const Allocator* allocator);
     void render(const Allocator* allocator);
 }
