@@ -6,6 +6,7 @@
 #include "opengl_allocator.h"
 #include "platform.h"
 #include "renderer.h"
+#include "uniform_buffer_segment.h"
 
 namespace
 {
@@ -327,7 +328,7 @@ namespace renderer
         return true;
     }
 
-    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* const* names)
+    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names)
     {
         std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
 
@@ -342,8 +343,14 @@ namespace renderer
 
         OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferData + bufferOffset, bufferData + bufferCount);
 
-        auto* uniformBuffer = memoryView.read_object<GLuint>(getUniformBufferOffset(allocator)).data();
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
+
+        auto* uniformBuffer = memoryView.read_object<GLuint>(cursor.getOffset()).data();
         *uniformBuffer      = bufferAllocator.get();
+
+        cursor.step<GLuint>();
+
+        auto segments = memoryView.read_contiguous_array<UniformBufferSegment>(cursor.getOffset());
 
         const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
         if (programIndex >= shaderPrograms.size())
@@ -353,6 +360,85 @@ namespace renderer
 
         const GLuint shaderProgram = shaderPrograms.data()[programIndex];
 
+        const GLuint blockIndex = glGetUniformBlockIndex(shaderProgram, name);
+        if (blockIndex == GL_INVALID_INDEX)
+        {
+            return false;
+        }
+
+        GLint uniformCount = 0;
+        glGetActiveUniformBlockiv(shaderProgram, blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &uniformCount);
+        if (uniformCount < 0)
+        {
+            return false;
+        }
+
+        const size_t segmentCount = static_cast<size_t>(uniformCount);
+
+        if (segmentCount != segments.size())
+        {
+            return false;
+        }
+
+        GLuint* indices	= new GLuint[segmentCount]();
+        GLint* offsets	= new GLint[segmentCount]();
+        GLint* strides	= new GLint[segmentCount]();
+        GLint* types	= new GLint[segmentCount]();
+
+        glGetUniformIndices(shaderProgram, uniformCount, names, indices);
+        glGetActiveUniformsiv(shaderProgram, uniformCount, indices, GL_UNIFORM_OFFSET, offsets);
+        glGetActiveUniformsiv(shaderProgram, uniformCount, indices, GL_UNIFORM_SIZE, strides);
+        glGetActiveUniformsiv(shaderProgram, uniformCount, indices, GL_UNIFORM_TYPE, types);
+
+        GLsizeiptr sizeInBytes = 0;
+        for (size_t i = 0; i < segmentCount; ++i)
+        {
+            UniformBufferSegment* segment = segments.data() + i;
+
+            switch (types[i])
+            {
+            case GL_FLOAT_MAT4:
+                segment->stride = strides[i] * sizeof(glm::mat4);
+                break;
+            default:
+                break;
+            }
+
+            segment->offset = offsets[i];
+
+            sizeInBytes += segment->stride;
+        }
+
+        delete[] types;
+        delete[] strides;
+        delete[] offsets;
+        delete[] indices;
+
+        glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer);
+        glBufferData(GL_UNIFORM_BUFFER, sizeInBytes, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, *uniformBuffer, 0, sizeInBytes);
+
         return true;
+    }
+
+    void uploadUniformBuffer(const Allocator* allocator)
+    {
+        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+
+        ConstMemoryView memoryView(allocatorSpan);
+
+        const auto uniformBuffer    = memoryView.read_object<GLuint>(getUniformBufferOffset(allocator));
+        const auto segments         = memoryView.read_contiguous_array<UniformBufferSegment>(getUniformSegmentOffset(allocator));
+
+        glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer.data());
+        for (size_t i = 0; i < segments.size(); ++i)
+        {
+            const UniformBufferSegment* segment = segments.data() + i;
+
+            glBufferSubData(GL_UNIFORM_BUFFER, segment->offset, segment->stride, segment->data);
+        }
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 }

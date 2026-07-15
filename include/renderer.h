@@ -28,6 +28,7 @@ namespace renderer
     uint64_t getCameraFrustumOffset(const Allocator* allocator);
     uint64_t getCameraOffset(const Allocator* allocator);
     uint64_t getUniformBufferOffset(const Allocator* allocator);
+    uint64_t getUniformSegmentOffset(const Allocator* allocator);
 
     void allocateBuffers(Allocator* allocator, size_t count);
     void generateBuffers(Allocator* allocator);
@@ -62,7 +63,8 @@ namespace renderer
     void updateCamera(Allocator* allocator);
 
     void allocateUniformBuffer(Allocator* allocator, size_t segmentCount);
-    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* const* names);
+    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names);
+    bool mapCameraUniforms(Allocator* allocator);
 
     void allocate(Allocator* allocator);
     void initializeGraphicsResources(Allocator* allocator);
@@ -70,5 +72,6 @@ namespace renderer
     void initializeGraphicsState();
     void clearFrameBuffer();
 
+    void uploadUniformBuffer(const Allocator* allocator);
     void render(const Allocator* allocator);
 }

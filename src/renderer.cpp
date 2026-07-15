@@ -140,6 +140,13 @@ namespace renderer
         return cursor.getOffset();
     }
 
+    uint64_t getUniformSegmentOffset(const Allocator* allocator)
+    {
+        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
+        cursor.step<unsigned int>();
+        return cursor.getOffset();
+    }
+
     void allocateBuffers(Allocator* allocator, size_t count)
     {
         allocator->requestMemory<uint64_t>(count);
@@ -294,6 +301,29 @@ namespace renderer
         allocator->requestMemoryArray<UniformBufferSegment>(segmentCount);
     }
 
+    bool mapCameraUniforms(Allocator* allocator)
+    {
+        auto memorySpan = std::span<std::byte, ALLOCATOR_SIZE>(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        MutableMemoryView memoryView(memorySpan);
+
+        const auto* camera  = memoryView.read_object<Camera>(getCameraOffset(allocator)).data();
+        auto segments       = memoryView.read_contiguous_array<UniformBufferSegment>(getUniformSegmentOffset(allocator));
+
+        if (segments.size() != 4)
+        {
+            return false;
+        }
+
+        auto* segmentData = segments.data();
+
+        segmentData[0].data = &camera->projection;
+        segmentData[1].data = &camera->localToWorld;
+        segmentData[2].data = &camera->localRotation;
+        segmentData[3].data = &camera->view;
+
+        return true;
+    }
+
     void allocate(Allocator* allocator)
     {
         allocator->allocate(ALLOCATOR_SIZE);
@@ -357,13 +387,14 @@ namespace renderer
         updateCamera(allocator);
 
         const char* cameraUniformNames[4] = {
-            "A",
-            "B",
-            "C",
-            "D"
+            "cameraProjection",
+            "cameraLocalToWorld",
+            "cameraLocalRotation",
+            "cameraView"
         };
 
-        generateUniformBuffer(allocator, 0, cameraUniformNames);
+        generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
+        mapCameraUniforms(allocator);
     }
 
     void freeGraphicsResources(Allocator* allocator)
