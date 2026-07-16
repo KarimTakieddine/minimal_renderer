@@ -1,7 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "renderer.h"
+#include "renderer.hpp"
 
 int main(int argc, char** argv)
 {
@@ -35,7 +35,8 @@ int main(int argc, char** argv)
 
     renderer::Allocator renderAllocator;
     renderer::allocate(&renderAllocator);
-    renderer::initializeGraphicsResources(&renderAllocator);
+    renderer::MutableGraphicsMemory mutableGraphicsMemory = renderer::readGraphicsMemory(&renderAllocator);
+    renderer::initializeGraphicsResources(mutableGraphicsMemory);
     renderer::initializeGraphicsState();
 
     while (!glfwWindowShouldClose(window))
@@ -43,12 +44,12 @@ int main(int argc, char** argv)
         glfwPollEvents();
 
         renderer::clearFrameBuffer();
-        renderer::render(&renderAllocator);
+        //renderer::render(&renderAllocator);
 
         glfwSwapBuffers(window);
     }
 
-    renderer::freeGraphicsResources(&renderAllocator);
+    // renderer::freeGraphicsResources(&renderAllocator);
     
     glfwDestroyWindow(window);
     glfwTerminate();

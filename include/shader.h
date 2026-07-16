@@ -13,6 +13,5 @@ namespace renderer
 
         const char* path    { nullptr };
         Type type           { Type::UNKNOWN };
-        unsigned int index  { 0 };
     };
 }

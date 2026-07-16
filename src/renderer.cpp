@@ -1,8 +1,5 @@
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <memory_cursor.hpp>
-#include <memory_view.hpp>
-
 #include "camera.h"
 #include "eye.h"
 #include "frustum.h"
@@ -10,7 +7,7 @@
 #include "mesh.hpp"
 #include "render_batch.h"
 #include "render_entity.h"
-#include "renderer.h"
+#include "renderer.hpp"
 #include "shader.h"
 #include "uniform_buffer_segment.h"
 
@@ -102,7 +99,7 @@ namespace renderer
 
         for (uint64_t i = 0; i < *meshCount.data(); ++i)
         {
-            cursor.step<ConstMesh::BufferIndices>();
+            cursor.step<MeshBufferIndices>();
 
             const auto vertexCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
             cursor.step_array<Vertex>(*vertexCount.data());
@@ -186,16 +183,15 @@ namespace renderer
         allocator->requestMemoryArray<unsigned int>(count);
     }
 
-    void allocateMeshes(Allocator* allocator, size_t count, const ConstMesh* meshes)
+    void allocateMeshes(Allocator* allocator, size_t count, const Mesh* meshes)
     {
         auto* meshCount = allocator->requestMemory<uint64_t>(count);
         
         for (size_t i = 0; i < *meshCount; ++i)
         {
-            const ConstMesh& mesh = meshes[i];
+            const Mesh& mesh = meshes[i];
 
-            auto* bufferIndices = allocator->requestMemory<ConstMesh::BufferIndices>();
-            *bufferIndices      = mesh.bufferIndices;
+            auto* bufferIndices = allocator->requestMemory<MeshBufferIndices>();
 
             auto* vertexCount   = allocator->requestMemory<uint64_t>(mesh.vertexCount);
             auto* vertices      = allocator->requestMemoryArray<Vertex>(*vertexCount);
@@ -213,41 +209,10 @@ namespace renderer
         }
     }
 
-    void uploadMeshes(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> meshSpan(
-            reinterpret_cast<const std::byte*>(allocator->peek()),
-            ALLOCATOR_SIZE);
-
-        ConstMemoryView meshMemoryView(meshSpan);
-
-        const auto* meshCount = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset()).data();
-        meshCursor.step<uint64_t>();
-
-        for (uint64_t i = 0; i < *meshCount; ++i)
-        {
-            const auto* bufferIndices = meshMemoryView.read_object<ConstMesh::BufferIndices>(meshCursor.getOffset()).data();
-            meshCursor.step<ConstMesh::BufferIndices>();
-
-            const auto* vertexCount = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset()).data();
-            const auto vertexData   = meshMemoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
-            meshCursor.step_array<Vertex>(*vertexCount);
-
-            const auto* triangleCount   = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset()).data();
-            const auto triangleData     = meshMemoryView.read_contiguous_array<unsigned int>(meshCursor.getOffset());
-            meshCursor.step_array<unsigned int>(*triangleCount);
-
-            ConstMesh mesh{ vertexData.data(), triangleData.data(), *vertexCount, *triangleCount, *bufferIndices };
-            uploadMesh(&mesh);
-        }
-    }
-
     void allocateShaders(Allocator* allocator, size_t count)
     {
         allocator->requestMemory<uint64_t>(count);
-        allocator->requestMemoryArray<Shader>(count);
+        allocator->requestMemoryArray<unsigned int>(count);
     }
 
     void allocateShaderPrograms(Allocator* allocator, size_t count)
@@ -269,50 +234,24 @@ namespace renderer
         allocator->requestMemory<Camera>();
     }
 
-    void setCameraEye(Allocator* allocator, const Eye* eye)
+    void setCameraEye(const MutableGraphicsMemory& memory, const Eye* eye)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto* cameraEye = memoryView.read_object<Eye>(cursor.getOffset()).data();
-
-        *cameraEye = *eye;
+        *( memory.cameraEye.data() ) = *eye;
     }
 
-    void setCameraFrustum(Allocator* allocator, const Frustum* frustum)
+    void setCameraFrustum(const MutableGraphicsMemory& memory, const Frustum* frustum)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto* cameraFrustum = memoryView.read_object<Frustum>(cursor.getOffset()).data();
-
-        *cameraFrustum = *frustum;
+        *( memory.cameraFrustum.data() ) = *frustum;
     }
 
-    void updateCamera(Allocator* allocator)
+    void updateCamera(const MutableGraphicsMemory& memory)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto* eye     = memory.cameraEye.data();
+        const auto* frustum = memory.cameraFrustum.data();
+        auto* camera        = memory.camera.data();
 
-        MemoryCursor<MEMORY_ALIGNMENT> cameraDataCursor(getCameraEyeOffset(allocator));
-
-        ConstMemoryView cameraDataView(allocatorSpan);
-
-        const auto* cameraEye = cameraDataView.read_object<Eye>(cameraDataCursor.getOffset()).data();
-        cameraDataCursor.step<Eye>();
-
-        const auto* cameraFrustum = cameraDataView.read_object<Frustum>(cameraDataCursor.getOffset()).data();
-        cameraDataCursor.step<Frustum>();
-
-        MutableMemoryView cameraView(allocatorSpan);
-        MemoryCursor<MEMORY_ALIGNMENT> cameraCursor(getCameraOffset(allocator));
-        auto* camera = cameraView.read_object<Camera>(cameraCursor.getOffset()).data();
-
-        camera->projection  = glm::perspective(glm::radians(cameraFrustum->fov), cameraFrustum->aspect, cameraFrustum->near, cameraFrustum->far);
-        camera->view        = glm::lookAtRH(cameraEye->position, cameraEye->target, cameraEye->up);
+        camera->projection  = glm::perspective(glm::radians(frustum->fov), frustum->aspect, frustum->near, frustum->far);
+        camera->view        = glm::lookAtRH(eye->position, eye->target, eye->up);
     }
 
     void allocateUniformBuffer(Allocator* allocator, size_t segmentCount)
@@ -376,8 +315,8 @@ namespace renderer
             { { 0.5f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
         };
         unsigned int quadTriangles[6]   = { 0, 2, 1, 0, 3, 2 };
-        ConstMesh meshList[1]           = { { quadVertices, quadTriangles, 4, 6 } };
-        allocateMeshes(allocator, 1, meshList);
+        Mesh meshes[1] = { { quadVertices, quadTriangles, 4, 6 } };
+        allocateMeshes(allocator, 1, meshes);
         allocateLocationsDescriptors(allocator, 1);
         allocateCamera(allocator);
         allocateUniformBuffer(allocator, 4);
@@ -388,41 +327,41 @@ namespace renderer
 
     void initializeGraphicsResources(Allocator* allocator)
     {
-        generateBuffers(allocator);
-        generateVertexArrays(allocator);
-        generateTextures(allocator);
+        //generateBuffers(allocator);
+        //generateVertexArrays(allocator);
+        //generateTextures(allocator);
 
-        Shader shaderList[2] = {
-            { "./shaders/3d_transform_vertex.slh", Shader::Type::VERTEX },
-            { "./shaders/3d_transform_fragment.slh", Shader::Type::FRAGMENT },
-        };
-        generateShaders(allocator, 2, shaderList);
+        // Shader shaderList[2] = {
+        //     { "./shaders/3d_transform_vertex.slh", Shader::Type::VERTEX },
+        //     { "./shaders/3d_transform_fragment.slh", Shader::Type::FRAGMENT },
+        // };
+        // generateShaders(allocator, 2, shaderList);
         
-        size_t shaderIndices[2] = { 0, 1 };
-        generateShaderPrograms(allocator);
-        compileShaderProgram(allocator, 0, 2, shaderIndices);
+        // size_t shaderIndices[2] = { 0, 1 };
+        // generateShaderPrograms(allocator);
+        // compileShaderProgram(allocator, 0, 2, shaderIndices);
 
-        generateMeshes(allocator);
-        uploadMeshes(allocator);
+        // generateMeshes(allocator);
+        // uploadMeshes(allocator);
 
-        setShaderLocations(allocator, 0, 0);
+        // setShaderLocations(allocator, 0, 0);
 
-        Eye cameraEye = {
-            .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
-            .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
-            .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
-        };
-        setCameraEye(allocator, &cameraEye);
+        // Eye cameraEye = {
+        //     .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
+        //     .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
+        //     .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
+        // };
+        // setCameraEye(allocator, &cameraEye);
 
-        Frustum cameraFrustum = {
-            .fov    = 45.0f,
-            .aspect = 1920.0f / 1080.0f,
-            .near   = 1.0f,
-            .far    = 100.0f
-        };
-        setCameraFrustum(allocator, &cameraFrustum);
+        // Frustum cameraFrustum = {
+        //     .fov    = 45.0f,
+        //     .aspect = 1920.0f / 1080.0f,
+        //     .near   = 1.0f,
+        //     .far    = 100.0f
+        // };
+        // setCameraFrustum(allocator, &cameraFrustum);
 
-        updateCamera(allocator);
+        // updateCamera(allocator);
 
         const char* cameraUniformNames[4] = {
             "cameraProjection",
@@ -436,6 +375,48 @@ namespace renderer
 
         generateRenderBatch(allocator, 0, 0, 0, 0);
         setVertexLayout(allocator, 0, 0);
+    }
+
+    void initializeGraphicsResources(const MutableGraphicsMemory& memory)
+    {
+        generateBuffers(memory);
+        generateVertexArrays(memory);
+        generateTextures(memory);
+
+        Shader shaderList[2] = {
+            { "./shaders/3d_transform_vertex.slh", Shader::Type::VERTEX },
+            { "./shaders/3d_transform_fragment.slh", Shader::Type::FRAGMENT },
+        };
+        generateShaders(memory, 2, shaderList);
+
+        size_t shaderIndices[2] = { 0, 1 };
+        generateShaderPrograms(memory);
+        compileShaderProgram(memory, 0, 2, shaderIndices);
+
+        generateMeshes(memory);
+
+        uploadMeshes(freezeGraphicsMemory(memory));
+
+        setShaderLocations(memory, 0, 0);
+
+        Eye cameraEye = {
+            .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
+            .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
+            .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
+        };
+        setCameraEye(memory, &cameraEye);
+
+        Frustum cameraFrustum = {
+            .fov    = 45.0f,
+            .aspect = 1920.0f / 1080.0f,
+            .near   = 1.0f,
+            .far    = 100.0f
+        };
+        setCameraFrustum(memory, &cameraFrustum);
+
+        updateCamera(memory);
+
+
     }
 
     void freeGraphicsResources(Allocator* allocator)
