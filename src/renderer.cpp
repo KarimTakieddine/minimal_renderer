@@ -261,13 +261,9 @@ namespace renderer
         allocator->requestMemoryArray<UniformBufferSegment>(segmentCount);
     }
 
-    bool mapCameraUniforms(Allocator* allocator)
+    bool mapCameraUniforms(const MutableGraphicsMemory& memory)
     {
-        auto memorySpan = std::span<std::byte, ALLOCATOR_SIZE>(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-        MutableMemoryView memoryView(memorySpan);
-
-        const auto* camera  = memoryView.read_object<Camera>(getCameraOffset(allocator)).data();
-        auto segments       = memoryView.read_contiguous_array<UniformBufferSegment>(getUniformSegmentOffset(allocator));
+        const auto segments = memory.uniformBufferSegments;
 
         if (segments.size() != 4)
         {
@@ -275,6 +271,8 @@ namespace renderer
         }
 
         auto* segmentData = segments.data();
+
+        const auto* camera = memory.camera.data();
 
         segmentData[0].data = &camera->projection;
         segmentData[1].data = &camera->localToWorld;
@@ -363,17 +361,17 @@ namespace renderer
 
         // updateCamera(allocator);
 
-        const char* cameraUniformNames[4] = {
-            "cameraProjection",
-            "cameraLocalToWorld",
-            "cameraLocalRotation",
-            "cameraView"
-        };
+        // const char* cameraUniformNames[4] = {
+        //     "cameraProjection",
+        //     "cameraLocalToWorld",
+        //     "cameraLocalRotation",
+        //     "cameraView"
+        // };
 
-        generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
-        mapCameraUniforms(allocator);
+        // generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
+        // mapCameraUniforms(allocator);
 
-        generateRenderBatch(allocator, 0, 0, 0, 0);
+        // generateRenderBatch(allocator, 0, 0, 0, 0);
         setVertexLayout(allocator, 0, 0);
     }
 
@@ -416,7 +414,17 @@ namespace renderer
 
         updateCamera(memory);
 
+        const char* cameraUniformNames[4] = {
+            "cameraProjection",
+            "cameraLocalToWorld",
+            "cameraLocalRotation",
+            "cameraView"
+        };
 
+        generateUniformBuffer(memory, 0, "CameraMatrices", cameraUniformNames);
+        mapCameraUniforms(memory);
+
+        generateRenderBatch(memory, 0, 0, 0, 0);
     }
 
     void freeGraphicsResources(Allocator* allocator)
@@ -462,7 +470,7 @@ namespace renderer
 
     void render(const Allocator* allocator)
     {
-        uploadUniformBuffer(allocator);
-        renderBatches(allocator);
+        // uploadUniformBuffer(allocator);
+        // renderBatches(allocator);
     }
 }

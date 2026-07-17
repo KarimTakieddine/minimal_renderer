@@ -26,6 +26,7 @@ namespace renderer
         DynamicSpan<Camera, IsConst> camera;
         DynamicSpan<unsigned int, IsConst> uniformBuffer;
         DynamicSpan<UniformBufferSegment, IsConst> uniformBufferSegments;
+        DynamicSpan<std::byte, IsConst> renderBatchSpan;
     };
 
     using ConstGraphicsMemory   = GraphicsMemory<true>;

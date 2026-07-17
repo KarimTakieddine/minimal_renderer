@@ -7,8 +7,7 @@
 #include "locations_descriptor.h"
 #include "opengl_allocator.h"
 #include "platform.h"
-#include "render_batch.h"
-#include "render_entity.h"
+#include "render_batch_span.hpp"
 #include "renderer.hpp"
 #include "shader.h"
 #include "uniform_buffer_segment.h"
@@ -379,31 +378,21 @@ namespace renderer
         return true;
     }
 
-    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names)
+    bool generateUniformBuffer(const MutableGraphicsMemory& memory, size_t programIndex, const char* name, const char* const* names)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto* meshCount       = reinterpret_cast<const uint64_t*>(memory.meshSpan.data());
+        const auto bufferObjects    = memory.bufferObjects;
+        auto* bufferObjectData      = bufferObjects.data();
 
-        MutableMemoryView memoryView(allocatorSpan);
+        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferObjectData + *meshCount * 2, bufferObjectData + bufferObjects.size());
 
-        const auto meshCount    = memoryView.read_object<uint64_t>(getMeshDataOffset(allocator));
-        auto buffers            = memoryView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
+        const auto uniformBuffer            = memory.uniformBuffer;
+        const GLuint uniformBufferObject    = bufferAllocator.get();
+        *uniformBuffer.data()               = uniformBufferObject;
 
-        auto* bufferData            = buffers.data();
-        const size_t bufferCount    = buffers.size();
-        const uint64_t bufferOffset = *meshCount.data() * 2;
+        const auto segments = memory.uniformBufferSegments;
 
-        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferData + bufferOffset, bufferData + bufferCount);
-
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
-
-        auto* uniformBuffer = memoryView.read_object<GLuint>(cursor.getOffset()).data();
-        *uniformBuffer      = bufferAllocator.get();
-
-        cursor.step<GLuint>();
-
-        auto segments = memoryView.read_contiguous_array<UniformBufferSegment>(cursor.getOffset());
-
-        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
+        const auto shaderPrograms = memory.shaderPrograms;
         if (programIndex >= shaderPrograms.size())
         {
             return false;
@@ -465,41 +454,36 @@ namespace renderer
         delete[] offsets;
         delete[] indices;
 
-        glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer);
+        glBindBuffer(GL_UNIFORM_BUFFER, uniformBufferObject);
         glBufferData(GL_UNIFORM_BUFFER, sizeInBytes, nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        glBindBufferRange(GL_UNIFORM_BUFFER, 0, *uniformBuffer, 0, sizeInBytes);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, uniformBufferObject, 0, sizeInBytes);
 
         return true;
     }
 
-    void uploadUniformBuffer(const Allocator* allocator)
+    void uploadUniformBuffer(const ConstGraphicsMemory& memory)
     {
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        ConstMemoryView memoryView(allocatorSpan);
-
-        const auto uniformBuffer    = memoryView.read_object<GLuint>(getUniformBufferOffset(allocator));
-        const auto segments         = memoryView.read_contiguous_array<UniformBufferSegment>(getUniformSegmentOffset(allocator));
+        const auto uniformBuffer = memory.uniformBuffer;
 
         glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer.data());
+
+        const auto segments = memory.uniformBufferSegments;
+
         for (size_t i = 0; i < segments.size(); ++i)
         {
             const UniformBufferSegment* segment = segments.data() + i;
 
             glBufferSubData(GL_UNIFORM_BUFFER, segment->offset, segment->stride, segment->data);
         }
+
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 
-    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex)
+    bool generateRenderBatch(const MutableGraphicsMemory& memory, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-
-        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
+        const auto shaderPrograms = memory.shaderPrograms;
         if (programIndex >= shaderPrograms.size())
         {
             return false;
@@ -507,7 +491,7 @@ namespace renderer
 
         const GLuint shaderProgram = shaderPrograms.data()[programIndex];
 
-        auto vertexArrays = memoryView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
+        auto vertexArrays = memory.vertexArrayObjects;
         if (vertexArrayIndex >= vertexArrays.size())
         {
             return false;
@@ -515,9 +499,10 @@ namespace renderer
 
         const GLuint vertexArray = vertexArrays.data()[vertexArrayIndex];
 
-        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+        MutableMemoryView batchMemoryView(memory.renderBatchSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor;
 
-        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+        const auto batchCount = batchMemoryView.read_object<uint64_t>(batchCursor.getOffset());
 
         if (batchIndex >= *batchCount.data())
         {
@@ -530,11 +515,11 @@ namespace renderer
         {
             batchCursor.step<RenderBatch>();
 
-            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            auto entities = batchMemoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
             batchCursor.step_array<RenderEntity>(entities.size());
         }
 
-        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+        auto* batch = batchMemoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
         batch->descriptorIndex  = descriptorIndex;
         batch->vertexArray      = vertexArray;

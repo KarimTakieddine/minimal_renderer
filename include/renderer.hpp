@@ -10,6 +10,8 @@
 #include "graphics_memory.hpp"
 #include "mesh.hpp"
 #include "mesh_span.hpp"
+#include "render_batch.h"
+#include "render_entity.h"
 #include "shader.h"
 
 namespace renderer
@@ -17,7 +19,6 @@ namespace renderer
     struct LocationsDescriptor;
     struct Eye;
     struct Frustum;
-    struct RenderBatch;
     struct RenderEntity;
     struct Shader;
 
@@ -80,7 +81,7 @@ namespace renderer
         cursor.step_array<unsigned int>(shaderPrograms.size());
 
         const uint64_t meshDataOffset   = cursor.getOffset();
-        const uint64_t meshCount        = *memoryView.template read_object<uint64_t>(cursor.getOffset()).data();
+        const uint64_t meshCount        = *memoryView.template read_object<uint64_t>(meshDataOffset).data();
         cursor.step<uint64_t>();
         
         for (uint64_t i = 0; i < meshCount; ++i)
@@ -120,6 +121,20 @@ namespace renderer
         graphicsMemory.uniformBufferSegments                                = uniformBufferSegments;
         cursor.step_array<UniformBufferSegment>(uniformBufferSegments.size());
 
+        const uint64_t renderBatchOffset    = cursor.getOffset();
+        const uint64_t renderBatchCount     = *memoryView.template read_object<uint64_t>(renderBatchOffset).data();
+        cursor.step<uint64_t>();
+
+        for (uint64_t i = 0; i < renderBatchCount; ++i)
+        {
+            cursor.step<RenderBatch>();
+
+            const uint64_t entityCount = *memoryView.template read_object<uint64_t>(cursor.getOffset()).data();
+            cursor.step_array<RenderEntity>(entityCount);
+        }
+
+        graphicsMemory.renderBatchSpan = allocatorSpan.subspan(renderBatchOffset, cursor.getOffset() - renderBatchOffset);
+
         return graphicsMemory;
     }
 
@@ -150,10 +165,10 @@ namespace renderer
     void setCameraEye(const MutableGraphicsMemory& memory, const Eye* eye);
     void setCameraFrustum(const MutableGraphicsMemory& memory, const Frustum* frustum);
     void updateCamera(const MutableGraphicsMemory& memory);
-    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names);
-    bool mapCameraUniforms(Allocator* allocator);
-    void uploadUniformBuffer(const Allocator* allocator);
-    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex);
+    bool generateUniformBuffer(const MutableGraphicsMemory& memory, size_t programIndex, const char* name, const char* const* names);
+    bool mapCameraUniforms(const MutableGraphicsMemory& memory);
+    void uploadUniformBuffer(const ConstGraphicsMemory& memory);
+    bool generateRenderBatch(const MutableGraphicsMemory& memory, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex);
     bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex);
     void initializeGraphicsResources(Allocator* allocator);
     void initializeGraphicsResources(const MutableGraphicsMemory& memory);
