@@ -7,9 +7,7 @@
 #include "locations_descriptor.h"
 #include "opengl_allocator.h"
 #include "platform.h"
-#include "render_batch.h"
-#include "render_entity.h"
-#include "renderer.h"
+#include "renderer.hpp"
 #include "shader.h"
 #include "uniform_buffer_segment.h"
 
@@ -20,136 +18,123 @@ namespace
 
 namespace renderer
 {
-    void generateBuffers(Allocator* allocator)
+    void generateBuffers(const MutableGraphicsMemory& memory)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto bufferObjects = memory.bufferObjects;
+        GLuint* bufferObjectData = bufferObjects.data();
 
-        MutableMemoryView bufferView(allocatorSpan);
-        auto buffers = bufferView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferObjectData, bufferObjectData);
 
-        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, buffers.data(), buffers.data());
-        bufferAllocator.allocate(static_cast<GLsizei>(buffers.size()));
+        bufferAllocator.allocate(static_cast<GLsizei>(bufferObjects.size()));
     }
 
-    void freeBuffers(Allocator* allocator)
+    void generateVertexArrays(const MutableGraphicsMemory& memory)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto vertexArrayObjects = memory.vertexArrayObjects;
+        GLuint* vertexArrayObjectData = vertexArrayObjects.data();
 
-        MutableMemoryView memoryView(allocatorSpan);
-        auto buffers = memoryView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
+        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayObjectData, vertexArrayObjectData);
 
-        auto* bufferData            = buffers.data();
-        const size_t bufferCount    = buffers.size();
-        
-        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData, bufferData + bufferCount);
-        bufferAllocator.free(static_cast<GLsizei>(bufferCount));
+        vertexArrayAllocator.allocate(static_cast<GLsizei>(vertexArrayObjects.size()));
     }
 
-    void generateVertexArrays(Allocator* allocator)
+    void generateTextures(const MutableGraphicsMemory& memory)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto textureObjects = memory.textures;
+        GLuint* textureObjectData = textureObjects.data();
 
-        MutableMemoryView vertexArrayView(allocatorSpan);
-        auto vertexArrays = vertexArrayView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
+        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureObjectData, textureObjectData);
 
-        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrays.data(), vertexArrays.data());
-        vertexArrayAllocator.allocate(static_cast<GLsizei>(vertexArrays.size()));
+        textureAllocator.allocate(static_cast<GLsizei>(textureObjects.size()));
     }
 
-    void freeVertexArrays(Allocator* allocator)
+    void generateMeshes(const MutableGraphicsMemory& memory)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto bufferObjects    = memory.bufferObjects;
+        auto* bufferObjectData      = bufferObjects.data();
 
-        MutableMemoryView memoryView(allocatorSpan);
-        auto vertexArrays = memoryView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
+        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferObjectData, bufferObjectData + bufferObjects.size());
 
-        auto* vertexArrayData           = vertexArrays.data();
-        const size_t vertexArrayCount   = vertexArrays.size();
-        
-        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayData, vertexArrayData + vertexArrayCount);
-        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrayCount));
-    }
+        MutableMemoryView meshMemoryView(memory.meshSpan);
 
-    void generateTextures(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor;
 
-        MutableMemoryView textureView(allocatorSpan);
-        auto textures = textureView.read_contiguous_array<GLuint>(getTextureOffset(allocator));
+        const auto meshCount = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset());
+        meshCursor.step<uint64_t>();
 
-        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textures.data(), textures.data());
-        textureAllocator.allocate(static_cast<GLsizei>(textures.size()));
-    }
-
-    void freeTextures(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto textures = memoryView.read_contiguous_array<GLuint>(getTextureOffset(allocator));
-
-        auto* textureData           = textures.data();
-        const size_t textureCount   = textures.size();
-        
-        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData + textureCount);
-        textureAllocator.free(static_cast<GLsizei>(textureCount));
-    }
-
-    void generateMeshes(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto buffers = memoryView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
-
-        auto* bufferData            = buffers.data();
-        const size_t bufferCount    = buffers.size();
-        
-        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferData, bufferData + bufferCount);
-
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getMeshDataOffset(allocator));
-        auto meshCount = memoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step<uint64_t>();
-
-        for (size_t i = 0; i < *meshCount.data(); ++i)
+        for (uint64_t i = 0; i < *meshCount.data(); ++i)
         {
-            auto* bufferIndices = memoryView.read_object<ConstMesh::BufferIndices>(cursor.getOffset()).data();
+            auto* bufferIndices = meshMemoryView.read_object<MeshBufferIndices>(meshCursor.getOffset()).data();
+            meshCursor.step<MeshBufferIndices>();
 
             bufferIndices->vertex   = bufferAllocator.get();
             bufferIndices->triangle = bufferAllocator.get();
 
-            cursor.step<ConstMesh::BufferIndices>();
+            const auto vertices = meshMemoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            meshCursor.step_array<Vertex>(vertices.size());
 
-            auto* vertexCount = memoryView.read_object<uint64_t>(cursor.getOffset()).data();
-            cursor.step_array<Vertex>(*vertexCount);
-
-            auto* triangleCount = memoryView.read_object<uint64_t>(cursor.getOffset()).data();
-            cursor.step_array<GLuint>(*triangleCount);
+            const auto triangles = meshMemoryView.read_contiguous_array<unsigned int>(meshCursor.getOffset());
+            meshCursor.step_array<unsigned int>(triangles.size());
         }
     }
 
-    void uploadMesh(const ConstMesh* mesh)
+    void uploadMeshes(const ConstGraphicsMemory& memory)
     {
-        const ConstMesh::BufferIndices& bufferIndices = mesh->bufferIndices;
+        ConstMemoryView meshMemoryView(memory.meshSpan);
 
-        glBindBuffer(GL_ARRAY_BUFFER, bufferIndices.vertex);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferIndices.triangle);
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor;
 
-        glBufferData(GL_ARRAY_BUFFER, mesh->vertexCount * sizeof(Vertex), mesh->vertices, GL_STATIC_DRAW);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->triangleCount * sizeof(GLuint), mesh->triangles, GL_STATIC_DRAW);
+        const auto meshCount = meshMemoryView.read_object<uint64_t>(meshCursor.getOffset());
+        meshCursor.step<uint64_t>();
+
+        for (uint64_t i = 0; i < *meshCount.data(); ++i)
+        {
+            MeshSpan<true> meshSpan;
+
+            meshSpan.bufferIndices = meshMemoryView.read_object<MeshBufferIndices>(meshCursor.getOffset());
+            meshCursor.step<MeshBufferIndices>();
+
+            const auto vertices = meshMemoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            meshSpan.vertices   = vertices;
+            meshCursor.step_array<Vertex>(vertices.size());
+
+            const auto triangles    = meshMemoryView.read_contiguous_array<unsigned int>(meshCursor.getOffset());
+            meshSpan.triangles      = triangles;
+            meshCursor.step_array<unsigned int>(triangles.size());
+
+            uploadMesh(meshSpan);
+        }
     }
 
-    void generateShaders(Allocator* allocator, size_t count, Shader* shaders)
+    void uploadMesh(const MeshSpan<true>& meshSpan)
     {
-        auto allocatorSpan = std::span<std::byte, ALLOCATOR_SIZE>(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-        MutableMemoryView memoryView(allocatorSpan);
-        auto* shaderData = memoryView.read_contiguous_array<Shader>(getShaderOffset(allocator)).data();
+        const auto* bufferIndices   = meshSpan.bufferIndices.data();
+        const auto vertices         = meshSpan.vertices;
+        const auto triangles        = meshSpan.triangles;
+
+        glBindBuffer(GL_ARRAY_BUFFER, bufferIndices->vertex);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size_bytes(), vertices.data(), GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferIndices->triangle);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangles.size_bytes(), triangles.data(), GL_STATIC_DRAW);
+    }
+
+    bool generateShaders(const MutableGraphicsMemory& memory, size_t count, const Shader* shaders)
+    {
+        const auto shadersView = memory.shaders;
+
+        auto shaderCount = shadersView.size();
+
+        if (count > shaderCount)
+        {
+            count = shaderCount;
+        }
+
+        auto* shadersData = shadersView.data();
 
         for (size_t i = 0; i < count; ++i)
         {
-            shaderData[i] = shaders[i];
-
-            Shader& shader = shaderData[i];
+            const Shader& shader = shaders[i];
 
             GLenum shaderType = GL_NONE;
 
@@ -167,82 +152,83 @@ namespace renderer
 
             if (shaderType == GL_NONE)
             {
-                continue;
+                return false;
             }
 
-            shader.index = glCreateShader(shaderType);
+            GLuint shaderObject = glCreateShader(shaderType);
+
+            *(shadersData + i) = shaderObject;
 
             size_t fileSize = platform::getFileSize(shader.path);
             if (fileSize == 0)
-                continue;
+                return false;
 
             char* fileBuffer = new char[fileSize + 1]();
             std::memset(fileBuffer, 0, fileSize + 1);
             if (!platform::readFile(shader.path, fileBuffer, fileSize))
             {
                 delete[] fileBuffer;
-                continue;
+                return false;
             }
 
-            glShaderSource(shader.index, 1, &fileBuffer, nullptr);
-            glCompileShader(shader.index);
+            glShaderSource(shaderObject, 1, &fileBuffer, nullptr);
+            glCompileShader(shaderObject);
+
+            GLint compileStatus{ GL_FALSE };
+            glGetShaderiv(shaderObject, GL_COMPILE_STATUS, &compileStatus);
+            if (compileStatus == GL_FALSE)
+            {
+                delete[] fileBuffer;
+                return false;
+            }
 
             delete[] fileBuffer;
         }
+
+        return true;
     }
 
-    void generateShaderPrograms(Allocator* allocator)
+    void generateShaderPrograms(const MutableGraphicsMemory& memory)
     {
-        auto allocatorSpan = std::span<std::byte, ALLOCATOR_SIZE>(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-        MutableMemoryView memoryView(allocatorSpan);
-        MemoryCursor<16> cursor(getShaderProgramOffset(allocator));
+        const auto shaderPrograms = memory.shaderPrograms;
 
-        auto* programCount  = memoryView.read_object<uint64_t>(cursor.getOffset()).data();
-        auto* programData   = memoryView.read_contiguous_array<GLuint>(cursor.getOffset()).data();
-
-        for (size_t i = 0; i < *programCount; ++i)
+        for (size_t i = 0; i < shaderPrograms.size(); ++i)
         {
-            programData[i] = glCreateProgram();
+            *(shaderPrograms.data() + i) = glCreateProgram();
         }
     }
 
-    void compileShaderProgram(const Allocator* allocator, size_t index, size_t shaderCount, const size_t* shaderIndices)
+    bool compileShaderProgram(const MutableGraphicsMemory& memory, size_t index, size_t count, const size_t* indices)
     {
-        auto allocatorSpan = std::span<const std::byte, ALLOCATOR_SIZE>(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-        ConstMemoryView memoryView(allocatorSpan);
-        MemoryCursor<16> shaderCursor(getShaderOffset(allocator));
-
-        const auto shaderSize = memoryView.read_object<uint64_t>(shaderCursor.getOffset());
-        const auto shaderData = memoryView.read_contiguous_array<Shader>(shaderCursor.getOffset());
-
-        if (shaderCount > *shaderSize.data())
-            return;
-
-        MemoryCursor<16> programCursor(getShaderProgramOffset(allocator));
-        const auto programCount     = memoryView.read_object<uint64_t>(programCursor.getOffset());
-        const auto programData      = memoryView.read_contiguous_array<GLuint>(programCursor.getOffset());
-
-        if (index >= *programCount.data())
-            return;
-
-        const GLuint program = programData.data()[index];
-
-        for (size_t i = 0; i < shaderCount; ++i)
+        const auto shaderPrograms = memory.shaderPrograms;
+        if (index >= shaderPrograms.size())
         {
-            const size_t shaderIndex = shaderIndices[i];
+            return false;
+        }
 
-            if (shaderIndex >= *shaderSize.data())
-                continue;
+        const auto shaders          = memory.shaders;
+        const size_t shaderCount    = shaders.size();
 
-            const Shader& shader = shaderData.data()[shaderIndex];
+        const GLuint program = shaderPrograms.data()[index];
 
-            glAttachShader(program, shader.index);
+        for (size_t i = 0; i < count; ++i)
+        {
+            const size_t shaderIndex = indices[i];
+
+            if (shaderIndex >= shaderCount)
+            {
+                return false;
+            }
+
+            glAttachShader(program, *(shaders.data() + shaderIndex));
         }
 
         glLinkProgram(program);
 
         GLint linkStatus{ GL_FALSE };
         glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
+
+        return linkStatus == GL_TRUE;
     }
 
     void initializeGraphicsState()
@@ -263,51 +249,9 @@ namespace renderer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    void freeShaders(Allocator* allocator)
+    bool setShaderLocations(const MutableGraphicsMemory& memory, size_t programIndex, size_t descriptorIndex)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
-
-        auto* shaderProgramData         = shaderPrograms.data();
-        const size_t shaderProgramCount = shaderPrograms.size();
-
-        for (size_t i = 0; i < shaderProgramCount; ++i)
-        {
-            const GLuint program = shaderProgramData[i];
-
-            GLint attachedShaderCount{ 0 };
-            glGetProgramiv(program, GL_ATTACHED_SHADERS, &attachedShaderCount);
-
-            if (attachedShaderCount > 0)
-            {
-                GLuint* attachedShaders = new GLuint[attachedShaderCount];
-                glGetAttachedShaders(program, attachedShaderCount, &attachedShaderCount, attachedShaders);
-                
-                for (GLint j = 0; j < attachedShaderCount; ++j)
-                {
-                    const GLuint shader = attachedShaders[j];
-
-                    glDetachShader(program, shader);
-                    glDeleteShader(shader);
-                }
-
-                delete[] attachedShaders;
-            }
-
-            glDeleteProgram(program);
-        }
-    }
-
-    bool setShaderLocations(Allocator* allocator, size_t programIndex, size_t descriptorIndex)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-
-        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
-
+        const auto shaderPrograms = memory.shaderPrograms;
         if (programIndex >= shaderPrograms.size())
         {
             return false;
@@ -315,8 +259,7 @@ namespace renderer
 
         const GLuint shaderProgram = shaderPrograms.data()[programIndex];
 
-        auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
-
+        const auto locationsDescriptors = memory.locationsDescriptors;
         if (descriptorIndex >= locationsDescriptors.size())
         {
             return false;
@@ -333,31 +276,21 @@ namespace renderer
         return true;
     }
 
-    bool generateUniformBuffer(Allocator* allocator, size_t programIndex, const char* name, const char* const* names)
+    bool generateUniformBuffer(const MutableGraphicsMemory& memory, size_t programIndex, const char* name, const char* const* names)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        const auto* meshCount       = reinterpret_cast<const uint64_t*>(memory.meshSpan.data());
+        const auto bufferObjects    = memory.bufferObjects;
+        auto* bufferObjectData      = bufferObjects.data();
 
-        MutableMemoryView memoryView(allocatorSpan);
+        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferObjectData + *meshCount * 2, bufferObjectData + bufferObjects.size());
 
-        const auto meshCount    = memoryView.read_object<uint64_t>(getMeshDataOffset(allocator));
-        auto buffers            = memoryView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
+        const auto uniformBuffer            = memory.uniformBuffer;
+        const GLuint uniformBufferObject    = bufferAllocator.get();
+        *uniformBuffer.data()               = uniformBufferObject;
 
-        auto* bufferData            = buffers.data();
-        const size_t bufferCount    = buffers.size();
-        const uint64_t bufferOffset = *meshCount.data() * 2;
+        const auto segments = memory.uniformBufferSegments;
 
-        OpenGLAllocator bufferAllocator(nullptr, nullptr, bufferData + bufferOffset, bufferData + bufferCount);
-
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
-
-        auto* uniformBuffer = memoryView.read_object<GLuint>(cursor.getOffset()).data();
-        *uniformBuffer      = bufferAllocator.get();
-
-        cursor.step<GLuint>();
-
-        auto segments = memoryView.read_contiguous_array<UniformBufferSegment>(cursor.getOffset());
-
-        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
+        const auto shaderPrograms = memory.shaderPrograms;
         if (programIndex >= shaderPrograms.size())
         {
             return false;
@@ -419,41 +352,36 @@ namespace renderer
         delete[] offsets;
         delete[] indices;
 
-        glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer);
+        glBindBuffer(GL_UNIFORM_BUFFER, uniformBufferObject);
         glBufferData(GL_UNIFORM_BUFFER, sizeInBytes, nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        glBindBufferRange(GL_UNIFORM_BUFFER, 0, *uniformBuffer, 0, sizeInBytes);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, uniformBufferObject, 0, sizeInBytes);
 
         return true;
     }
 
-    void uploadUniformBuffer(const Allocator* allocator)
+    void uploadUniformBuffer(const ConstGraphicsMemory& memory)
     {
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        ConstMemoryView memoryView(allocatorSpan);
-
-        const auto uniformBuffer    = memoryView.read_object<GLuint>(getUniformBufferOffset(allocator));
-        const auto segments         = memoryView.read_contiguous_array<UniformBufferSegment>(getUniformSegmentOffset(allocator));
+        const auto uniformBuffer = memory.uniformBuffer;
 
         glBindBuffer(GL_UNIFORM_BUFFER, *uniformBuffer.data());
+
+        const auto segments = memory.uniformBufferSegments;
+
         for (size_t i = 0; i < segments.size(); ++i)
         {
             const UniformBufferSegment* segment = segments.data() + i;
 
             glBufferSubData(GL_UNIFORM_BUFFER, segment->offset, segment->stride, segment->data);
         }
+
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 
-    bool generateRenderBatch(Allocator* allocator, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex)
+    bool generateRenderBatch(const MutableGraphicsMemory& memory, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-
-        const auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
+        const auto shaderPrograms = memory.shaderPrograms;
         if (programIndex >= shaderPrograms.size())
         {
             return false;
@@ -461,7 +389,7 @@ namespace renderer
 
         const GLuint shaderProgram = shaderPrograms.data()[programIndex];
 
-        auto vertexArrays = memoryView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
+        auto vertexArrays = memory.vertexArrayObjects;
         if (vertexArrayIndex >= vertexArrays.size())
         {
             return false;
@@ -469,9 +397,10 @@ namespace renderer
 
         const GLuint vertexArray = vertexArrays.data()[vertexArrayIndex];
 
-        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+        MutableMemoryView batchMemoryView(memory.renderBatchSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor;
 
-        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+        const auto batchCount = batchMemoryView.read_object<uint64_t>(batchCursor.getOffset());
 
         if (batchIndex >= *batchCount.data())
         {
@@ -484,11 +413,11 @@ namespace renderer
         {
             batchCursor.step<RenderBatch>();
 
-            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            auto entities = batchMemoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
             batchCursor.step_array<RenderEntity>(entities.size());
         }
 
-        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+        auto* batch = batchMemoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
         batch->descriptorIndex  = descriptorIndex;
         batch->vertexArray      = vertexArray;
@@ -497,15 +426,13 @@ namespace renderer
         return true;
     }
 
-    bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex)
+    bool setVertexLayout(const MutableGraphicsMemory& memory, size_t batchIndex, size_t meshIndex)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        ConstMemoryView meshView(memory.meshSpan);
 
-        MutableMemoryView memoryView(allocatorSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor;
+        const auto meshCount = meshView.read_object<uint64_t>(meshCursor.getOffset());
 
-        MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
-
-        const auto meshCount = memoryView.read_object<uint64_t>(meshCursor.getOffset());
         if (meshIndex >= *meshCount.data())
         {
             return false;
@@ -515,26 +442,27 @@ namespace renderer
 
         for (size_t i = 0; i < meshIndex; ++i)
         {
-            meshCursor.step<ConstMesh::BufferIndices>();
+            meshCursor.step<MeshBufferIndices>();
 
-            const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            const auto vertices = meshView.read_contiguous_array<Vertex>(meshCursor.getOffset());
             meshCursor.step_array<Vertex>(vertices.size());
 
-            const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+            const auto triangles = meshView.read_contiguous_array<GLuint>(meshCursor.getOffset());
             meshCursor.step_array<GLuint>(triangles.size());
         }
 
-        const auto* bufferIndices = memoryView.read_object<ConstMesh::BufferIndices>(meshCursor.getOffset()).data();
-        meshCursor.step<ConstMesh::BufferIndices>();
+        const auto* bufferIndices = meshView.read_object<MeshBufferIndices>(meshCursor.getOffset()).data();
+        meshCursor.step<MeshBufferIndices>();
 
-        const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+        const auto vertices = meshView.read_contiguous_array<Vertex>(meshCursor.getOffset());
         meshCursor.step_array<Vertex>(vertices.size());
 
-        const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+        const auto triangles = meshView.read_contiguous_array<GLuint>(meshCursor.getOffset());
 
-        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+        MutableMemoryView renderBatchView(memory.renderBatchSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor;
 
-        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+        const auto batchCount = renderBatchView.read_object<uint64_t>(batchCursor.getOffset());
 
         if (batchIndex >= *batchCount.data())
         {
@@ -547,15 +475,15 @@ namespace renderer
         {
             batchCursor.step<RenderBatch>();
 
-            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            auto entities = renderBatchView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
             batchCursor.step_array<RenderEntity>(entities.size());
         }
 
-        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+        auto* batch = renderBatchView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
         batch->elememtCount = static_cast<int>(triangles.size());
 
-        const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+        const auto locationsDescriptors = memory.locationsDescriptors;
         const size_t descriptorIndex    = batch->descriptorIndex;
 
         if (descriptorIndex >= locationsDescriptors.size())
@@ -582,10 +510,12 @@ namespace renderer
         return true;
     }
 
-    void renderBatch(const RenderBatch* batch)
+    void renderBatch(const RenderBatchSpan<true>& span)
     {
-        glUseProgram(batch->shaderProgram);
-        glBindVertexArray(batch->vertexArray);
+        const auto* renderBatch = span.renderBatch.data();
+
+        glUseProgram(renderBatch->shaderProgram);
+        glBindVertexArray(renderBatch->vertexArray);
     }
 
     void renderEntity(const RenderEntity* entity, const LocationsDescriptor* descriptor, int elementCount)
@@ -594,5 +524,69 @@ namespace renderer
         glUniform4fv(descriptor->materialColorLocation, 1, glm::value_ptr(entity->material.color));
 
         glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_INT, nullptr);
+    }
+
+    void freeBuffers(const MutableGraphicsMemory& memory)
+    {
+        const auto bufferObjects = memory.bufferObjects;
+        GLuint* bufferObjectData = bufferObjects.data();
+
+        const size_t bufferCount = bufferObjects.size();
+        
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferObjectData, bufferObjectData + bufferCount);
+        bufferAllocator.free(static_cast<GLsizei>(bufferCount));
+    }
+
+    void freeVertexArrays(const MutableGraphicsMemory& memory)
+    {
+        const auto vertexArrayObjects = memory.bufferObjects;
+        GLuint* vertexArrayObjectData = vertexArrayObjects.data();
+
+        const size_t vertexArrayCount = vertexArrayObjects.size();
+        
+        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayObjectData, vertexArrayObjectData + vertexArrayCount);
+        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrayCount));
+    }
+
+    void freeTextures(const MutableGraphicsMemory& memory)
+    {
+        const auto textures = memory.textures;
+        GLuint* textureData = textures.data();
+
+        const size_t textureCount = textures.size();
+        
+        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData + textureCount);
+        textureAllocator.free(static_cast<GLsizei>(textureCount));
+    }
+
+    void freeShaders(const MutableGraphicsMemory& memory)
+    {
+        const auto shaderPrograms = memory.shaderPrograms;
+
+        for (size_t i = 0; i < shaderPrograms.size(); ++i)
+        {
+            const GLuint program = *(shaderPrograms.data() + i);
+
+            GLint attachedShaderCount{ 0 };
+            glGetProgramiv(program, GL_ATTACHED_SHADERS, &attachedShaderCount);
+
+            if (attachedShaderCount > 0)
+            {
+                GLuint* attachedShaders = new GLuint[attachedShaderCount];
+                glGetAttachedShaders(program, attachedShaderCount, &attachedShaderCount, attachedShaders);
+                
+                for (GLint j = 0; j < attachedShaderCount; ++j)
+                {
+                    const GLuint shader = attachedShaders[j];
+
+                    glDetachShader(program, shader);
+                    glDeleteShader(shader);
+                }
+
+                delete[] attachedShaders;
+            }
+
+            glDeleteProgram(program);
+        }
     }
 }
