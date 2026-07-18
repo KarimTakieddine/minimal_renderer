@@ -376,12 +376,12 @@ namespace renderer
         setVertexLayout(memory, 0, 0);
     }
 
-    void freeGraphicsResources(Allocator* allocator)
+    void freeGraphicsResources(const MutableGraphicsMemory& memory)
     {
-        freeShaders(allocator);
-        freeTextures(allocator);
-        freeVertexArrays(allocator);
-        freeBuffers(allocator);
+        freeShaders(memory);
+        freeTextures(memory);
+        freeVertexArrays(memory);
+        freeBuffers(memory);
     }
 
     void renderBatches(const Allocator* allocator)

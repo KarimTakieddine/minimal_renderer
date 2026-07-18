@@ -49,7 +49,7 @@ int main(int argc, char** argv)
         glfwSwapBuffers(window);
     }
 
-    // renderer::freeGraphicsResources(&renderAllocator);
+    renderer::freeGraphicsResources(mutableGraphicsMemory);
     
     glfwDestroyWindow(window);
     glfwTerminate();

@@ -173,11 +173,11 @@ namespace renderer
     void initializeGraphicsResources(const MutableGraphicsMemory& memory);
 
 
-    void freeBuffers(Allocator* allocator);
-    void freeVertexArrays(Allocator* allocator);
-    void freeTextures(Allocator* allocator);
-    void freeShaders(Allocator* allocator);
-    void freeGraphicsResources(Allocator* allocator);
+    void freeBuffers(const MutableGraphicsMemory& memory);
+    void freeVertexArrays(const MutableGraphicsMemory& memory);
+    void freeTextures(const MutableGraphicsMemory& memory);
+    void freeShaders(const MutableGraphicsMemory& memory);
+    void freeGraphicsResources(const MutableGraphicsMemory& memory);
 
 
     void initializeGraphicsState();

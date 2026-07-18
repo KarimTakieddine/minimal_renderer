@@ -19,17 +19,6 @@ namespace
 
 namespace renderer
 {
-    // void generateBuffers(Allocator* allocator)
-    // {
-    //     std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-    //     MutableMemoryView bufferView(allocatorSpan);
-    //     auto buffers = bufferView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
-
-    //     OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, buffers.data(), buffers.data());
-    //     bufferAllocator.allocate(static_cast<GLsizei>(buffers.size()));
-    // }
-
     void generateBuffers(const MutableGraphicsMemory& memory)
     {
         const auto bufferObjects = memory.bufferObjects;
@@ -50,45 +39,6 @@ namespace renderer
         vertexArrayAllocator.allocate(static_cast<GLsizei>(vertexArrayObjects.size()));
     }
 
-    void freeBuffers(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto buffers = memoryView.read_contiguous_array<GLuint>(getBufferOffset(allocator));
-
-        auto* bufferData            = buffers.data();
-        const size_t bufferCount    = buffers.size();
-        
-        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferData, bufferData + bufferCount);
-        bufferAllocator.free(static_cast<GLsizei>(bufferCount));
-    }
-
-    // void generateVertexArrays(Allocator* allocator)
-    // {
-    //     std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-    //     MutableMemoryView vertexArrayView(allocatorSpan);
-    //     auto vertexArrays = vertexArrayView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
-
-    //     OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrays.data(), vertexArrays.data());
-    //     vertexArrayAllocator.allocate(static_cast<GLsizei>(vertexArrays.size()));
-    // }
-
-    void freeVertexArrays(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto vertexArrays = memoryView.read_contiguous_array<GLuint>(getVertexArrayOffset(allocator));
-
-        auto* vertexArrayData           = vertexArrays.data();
-        const size_t vertexArrayCount   = vertexArrays.size();
-        
-        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayData, vertexArrayData + vertexArrayCount);
-        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrayCount));
-    }
-
     void generateTextures(const MutableGraphicsMemory& memory)
     {
         const auto textureObjects = memory.textures;
@@ -97,20 +47,6 @@ namespace renderer
         OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureObjectData, textureObjectData);
 
         textureAllocator.allocate(static_cast<GLsizei>(textureObjects.size()));
-    }
-
-    void freeTextures(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto textures = memoryView.read_contiguous_array<GLuint>(getTextureOffset(allocator));
-
-        auto* textureData           = textures.data();
-        const size_t textureCount   = textures.size();
-        
-        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData + textureCount);
-        textureAllocator.free(static_cast<GLsizei>(textureCount));
     }
 
     void generateMeshes(const MutableGraphicsMemory& memory)
@@ -312,43 +248,6 @@ namespace renderer
     void clearFrameBuffer()
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    }
-
-    void freeShaders(Allocator* allocator)
-    {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        MutableMemoryView memoryView(allocatorSpan);
-        auto shaderPrograms = memoryView.read_contiguous_array<GLuint>(getShaderProgramOffset(allocator));
-
-        auto* shaderProgramData         = shaderPrograms.data();
-        const size_t shaderProgramCount = shaderPrograms.size();
-
-        for (size_t i = 0; i < shaderProgramCount; ++i)
-        {
-            const GLuint program = shaderProgramData[i];
-
-            GLint attachedShaderCount{ 0 };
-            glGetProgramiv(program, GL_ATTACHED_SHADERS, &attachedShaderCount);
-
-            if (attachedShaderCount > 0)
-            {
-                GLuint* attachedShaders = new GLuint[attachedShaderCount];
-                glGetAttachedShaders(program, attachedShaderCount, &attachedShaderCount, attachedShaders);
-                
-                for (GLint j = 0; j < attachedShaderCount; ++j)
-                {
-                    const GLuint shader = attachedShaders[j];
-
-                    glDetachShader(program, shader);
-                    glDeleteShader(shader);
-                }
-
-                delete[] attachedShaders;
-            }
-
-            glDeleteProgram(program);
-        }
     }
 
     bool setShaderLocations(const MutableGraphicsMemory& memory, size_t programIndex, size_t descriptorIndex)
@@ -624,5 +523,69 @@ namespace renderer
         glUniform4fv(descriptor->materialColorLocation, 1, glm::value_ptr(entity->material.color));
 
         glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_INT, nullptr);
+    }
+
+    void freeBuffers(const MutableGraphicsMemory& memory)
+    {
+        const auto bufferObjects = memory.bufferObjects;
+        GLuint* bufferObjectData = bufferObjects.data();
+
+        const size_t bufferCount = bufferObjects.size();
+        
+        OpenGLAllocator bufferAllocator(glGenBuffers, glDeleteBuffers, bufferObjectData, bufferObjectData + bufferCount);
+        bufferAllocator.free(static_cast<GLsizei>(bufferCount));
+    }
+
+    void freeVertexArrays(const MutableGraphicsMemory& memory)
+    {
+        const auto vertexArrayObjects = memory.bufferObjects;
+        GLuint* vertexArrayObjectData = vertexArrayObjects.data();
+
+        const size_t vertexArrayCount = vertexArrayObjects.size();
+        
+        OpenGLAllocator vertexArrayAllocator(glGenVertexArrays, glDeleteVertexArrays, vertexArrayObjectData, vertexArrayObjectData + vertexArrayCount);
+        vertexArrayAllocator.free(static_cast<GLsizei>(vertexArrayCount));
+    }
+
+    void freeTextures(const MutableGraphicsMemory& memory)
+    {
+        const auto textures = memory.textures;
+        GLuint* textureData = textures.data();
+
+        const size_t textureCount = textures.size();
+        
+        OpenGLAllocator textureAllocator(glGenTextures, glDeleteTextures, textureData, textureData + textureCount);
+        textureAllocator.free(static_cast<GLsizei>(textureCount));
+    }
+
+    void freeShaders(const MutableGraphicsMemory& memory)
+    {
+        const auto shaderPrograms = memory.shaderPrograms;
+
+        for (size_t i = 0; i < shaderPrograms.size(); ++i)
+        {
+            const GLuint program = *(shaderPrograms.data() + i);
+
+            GLint attachedShaderCount{ 0 };
+            glGetProgramiv(program, GL_ATTACHED_SHADERS, &attachedShaderCount);
+
+            if (attachedShaderCount > 0)
+            {
+                GLuint* attachedShaders = new GLuint[attachedShaderCount];
+                glGetAttachedShaders(program, attachedShaderCount, &attachedShaderCount, attachedShaders);
+                
+                for (GLint j = 0; j < attachedShaderCount; ++j)
+                {
+                    const GLuint shader = attachedShaders[j];
+
+                    glDetachShader(program, shader);
+                    glDeleteShader(shader);
+                }
+
+                delete[] attachedShaders;
+            }
+
+            glDeleteProgram(program);
+        }
     }
 }
