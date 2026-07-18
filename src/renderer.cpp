@@ -323,58 +323,6 @@ namespace renderer
         allocateRenderBatches(allocator, 1, &entityCount);
     }
 
-    void initializeGraphicsResources(Allocator* allocator)
-    {
-        //generateBuffers(allocator);
-        //generateVertexArrays(allocator);
-        //generateTextures(allocator);
-
-        // Shader shaderList[2] = {
-        //     { "./shaders/3d_transform_vertex.slh", Shader::Type::VERTEX },
-        //     { "./shaders/3d_transform_fragment.slh", Shader::Type::FRAGMENT },
-        // };
-        // generateShaders(allocator, 2, shaderList);
-        
-        // size_t shaderIndices[2] = { 0, 1 };
-        // generateShaderPrograms(allocator);
-        // compileShaderProgram(allocator, 0, 2, shaderIndices);
-
-        // generateMeshes(allocator);
-        // uploadMeshes(allocator);
-
-        // setShaderLocations(allocator, 0, 0);
-
-        // Eye cameraEye = {
-        //     .position   = glm::vec3{ 0.0f, 0.0f, 10.0f },
-        //     .target	    = glm::vec3{ 0.0f, 0.0f, 0.0f },
-        //     .up		    = glm::vec3{ 0.0f, 1.0f, 0.0f }
-        // };
-        // setCameraEye(allocator, &cameraEye);
-
-        // Frustum cameraFrustum = {
-        //     .fov    = 45.0f,
-        //     .aspect = 1920.0f / 1080.0f,
-        //     .near   = 1.0f,
-        //     .far    = 100.0f
-        // };
-        // setCameraFrustum(allocator, &cameraFrustum);
-
-        // updateCamera(allocator);
-
-        // const char* cameraUniformNames[4] = {
-        //     "cameraProjection",
-        //     "cameraLocalToWorld",
-        //     "cameraLocalRotation",
-        //     "cameraView"
-        // };
-
-        // generateUniformBuffer(allocator, 0, "CameraMatrices", cameraUniformNames);
-        // mapCameraUniforms(allocator);
-
-        // generateRenderBatch(allocator, 0, 0, 0, 0);
-        setVertexLayout(allocator, 0, 0);
-    }
-
     void initializeGraphicsResources(const MutableGraphicsMemory& memory)
     {
         generateBuffers(memory);
@@ -425,6 +373,7 @@ namespace renderer
         mapCameraUniforms(memory);
 
         generateRenderBatch(memory, 0, 0, 0, 0);
+        setVertexLayout(memory, 0, 0);
     }
 
     void freeGraphicsResources(Allocator* allocator)

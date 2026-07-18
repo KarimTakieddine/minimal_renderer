@@ -169,8 +169,7 @@ namespace renderer
     bool mapCameraUniforms(const MutableGraphicsMemory& memory);
     void uploadUniformBuffer(const ConstGraphicsMemory& memory);
     bool generateRenderBatch(const MutableGraphicsMemory& memory, size_t batchIndex, size_t vertexArrayIndex, size_t programIndex, size_t descriptorIndex);
-    bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex);
-    void initializeGraphicsResources(Allocator* allocator);
+    bool setVertexLayout(const MutableGraphicsMemory& memory, size_t batchIndex, size_t meshIndex);
     void initializeGraphicsResources(const MutableGraphicsMemory& memory);
 
 

@@ -528,15 +528,13 @@ namespace renderer
         return true;
     }
 
-    bool setVertexLayout(Allocator* allocator, size_t batchIndex, size_t meshIndex)
+    bool setVertexLayout(const MutableGraphicsMemory& memory, size_t batchIndex, size_t meshIndex)
     {
-        std::span<std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        ConstMemoryView meshView(memory.meshSpan);
 
-        MutableMemoryView memoryView(allocatorSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> meshCursor;
+        const auto meshCount = meshView.read_object<uint64_t>(meshCursor.getOffset());
 
-        MemoryCursor<MEMORY_ALIGNMENT> meshCursor(getMeshDataOffset(allocator));
-
-        const auto meshCount = memoryView.read_object<uint64_t>(meshCursor.getOffset());
         if (meshIndex >= *meshCount.data())
         {
             return false;
@@ -548,24 +546,25 @@ namespace renderer
         {
             meshCursor.step<MeshBufferIndices>();
 
-            const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+            const auto vertices = meshView.read_contiguous_array<Vertex>(meshCursor.getOffset());
             meshCursor.step_array<Vertex>(vertices.size());
 
-            const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+            const auto triangles = meshView.read_contiguous_array<GLuint>(meshCursor.getOffset());
             meshCursor.step_array<GLuint>(triangles.size());
         }
 
-        const auto* bufferIndices = memoryView.read_object<MeshBufferIndices>(meshCursor.getOffset()).data();
+        const auto* bufferIndices = meshView.read_object<MeshBufferIndices>(meshCursor.getOffset()).data();
         meshCursor.step<MeshBufferIndices>();
 
-        const auto vertices = memoryView.read_contiguous_array<Vertex>(meshCursor.getOffset());
+        const auto vertices = meshView.read_contiguous_array<Vertex>(meshCursor.getOffset());
         meshCursor.step_array<Vertex>(vertices.size());
 
-        const auto triangles = memoryView.read_contiguous_array<GLuint>(meshCursor.getOffset());
+        const auto triangles = meshView.read_contiguous_array<GLuint>(meshCursor.getOffset());
 
-        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+        MutableMemoryView renderBatchView(memory.renderBatchSpan);
+        MemoryCursor<MEMORY_ALIGNMENT> batchCursor;
 
-        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
+        const auto batchCount = renderBatchView.read_object<uint64_t>(batchCursor.getOffset());
 
         if (batchIndex >= *batchCount.data())
         {
@@ -578,15 +577,15 @@ namespace renderer
         {
             batchCursor.step<RenderBatch>();
 
-            auto entities = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
+            auto entities = renderBatchView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
             batchCursor.step_array<RenderEntity>(entities.size());
         }
 
-        auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+        auto* batch = renderBatchView.read_object<RenderBatch>(batchCursor.getOffset()).data();
 
         batch->elememtCount = static_cast<int>(triangles.size());
 
-        const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
+        const auto locationsDescriptors = memory.locationsDescriptors;
         const size_t descriptorIndex    = batch->descriptorIndex;
 
         if (descriptorIndex >= locationsDescriptors.size())
