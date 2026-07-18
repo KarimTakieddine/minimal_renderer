@@ -5,166 +5,12 @@
 #include "frustum.h"
 #include "locations_descriptor.h"
 #include "mesh.hpp"
-#include "render_batch.h"
-#include "render_entity.h"
 #include "renderer.hpp"
 #include "shader.h"
 #include "uniform_buffer_segment.h"
 
 namespace renderer
 {
-    uint64_t getBufferOffset(const Allocator* allocator)
-    {
-        return 0;
-    }
-
-    uint64_t getVertexArrayOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor;
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(
-            static_cast<const std::byte*>(allocator->peek()),
-            ALLOCATOR_SIZE);
-        
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto bufferCount = allocatorMemoryView.read_object<uint64_t>(getBufferOffset(allocator));
-        cursor.step_array<unsigned int>(*bufferCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getTextureOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getVertexArrayOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(
-            static_cast<const std::byte*>(allocator->peek()),
-            ALLOCATOR_SIZE);
-        
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto vertexArrayCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step_array<unsigned int>(*vertexArrayCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getShaderOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getTextureOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-     
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto textureCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step_array<unsigned int>(*textureCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getShaderProgramOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getShaderOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-     
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto shaderCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step_array<Shader>(*shaderCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getMeshDataOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getShaderProgramOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-     
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto shaderProgramCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step_array<unsigned int>(*shaderProgramCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getLocationsDescriptorOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getMeshDataOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto meshCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step<uint64_t>();
-
-        for (uint64_t i = 0; i < *meshCount.data(); ++i)
-        {
-            cursor.step<MeshBufferIndices>();
-
-            const auto vertexCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-            cursor.step_array<Vertex>(*vertexCount.data());
-
-            const auto triangleCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-            cursor.step_array<unsigned int>(*triangleCount.data());
-        }
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getCameraEyeOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getLocationsDescriptorOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto locationsDescriptorCount = allocatorMemoryView.read_object<uint64_t>(cursor.getOffset());
-        cursor.step_array<LocationsDescriptor>(*locationsDescriptorCount.data());
-
-        return cursor.getOffset();
-    }
-
-    uint64_t getCameraFrustumOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraEyeOffset(allocator));
-        cursor.step<Eye>();
-        return cursor.getOffset();
-    }
-
-    uint64_t getCameraOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraFrustumOffset(allocator));
-        cursor.step<Frustum>();
-        return cursor.getOffset();
-    }
-
-    uint64_t getUniformBufferOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getCameraOffset(allocator));
-        cursor.step<Camera>();
-        return cursor.getOffset();
-    }
-
-    uint64_t getUniformSegmentOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformBufferOffset(allocator));
-        cursor.step<unsigned int>();
-        return cursor.getOffset();
-    }
-
-    uint64_t getRenderBatchOffset(const Allocator* allocator)
-    {
-        MemoryCursor<MEMORY_ALIGNMENT> cursor(getUniformSegmentOffset(allocator));
-
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(static_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
-
-        ConstMemoryView allocatorMemoryView(allocatorSpan);
-        const auto uniformSegments = allocatorMemoryView.read_contiguous_array<UniformBufferSegment>(cursor.getOffset());
-        cursor.step_array<UniformBufferSegment>(uniformSegments.size());
-
-        return cursor.getOffset();
-    }
-
     void allocateBuffers(Allocator* allocator, size_t count)
     {
         allocator->requestMemory<uint64_t>(count);
@@ -384,42 +230,39 @@ namespace renderer
         freeBuffers(memory);
     }
 
-    void renderBatches(const Allocator* allocator)
+    void renderBatches(const ConstGraphicsMemory& memory)
     {
-        std::span<const std::byte, ALLOCATOR_SIZE> allocatorSpan(reinterpret_cast<const std::byte*>(allocator->peek()), ALLOCATOR_SIZE);
+        ConstMemoryView renderBatchView(memory.renderBatchSpan);
 
-        ConstMemoryView memoryView(allocatorSpan);
-        MemoryCursor<MEMORY_ALIGNMENT> batchCursor(getRenderBatchOffset(allocator));
+        MemoryCursor<MEMORY_ALIGNMENT> renderBatchCursor;
 
-        const auto batchCount = memoryView.read_object<uint64_t>(batchCursor.getOffset());
-        batchCursor.step<uint64_t>();
+        const auto batchCount = renderBatchView.read_object<uint64_t>(renderBatchCursor.getOffset());
+        renderBatchCursor.step<uint64_t>();
 
         for (uint64_t i = 0; i < *batchCount.data(); ++i)
         {
-            const auto* batch = memoryView.read_object<RenderBatch>(batchCursor.getOffset()).data();
+            RenderBatchSpan<true> batchSpan;
 
-            const auto locationsDescriptors = memoryView.read_contiguous_array<LocationsDescriptor>(getLocationsDescriptorOffset(allocator));
-            const auto* locationsDescriptor = locationsDescriptors.data() + batch->descriptorIndex;
-            
-            renderBatch(batch);
+            const auto batch        = renderBatchView.read_object<RenderBatch>(renderBatchCursor.getOffset()); 
+            batchSpan.renderBatch   = batch;
+            renderBatchCursor.step<RenderBatch>();
 
-            batchCursor.step<RenderBatch>();
+            const auto entities = renderBatchView.read_contiguous_array<RenderEntity>(renderBatchCursor.getOffset());
+            batchSpan.entities  = entities;
+            renderBatchCursor.step_array<RenderEntity>(entities.size());
 
-            const auto renderEntities   = memoryView.read_contiguous_array<RenderEntity>(batchCursor.getOffset());
-            const size_t entityCount    = renderEntities.size();
+            renderBatch(batchSpan);
 
-            for (size_t j = 0; j < entityCount; ++j)
+            for (size_t j = 0; j < entities.size(); ++j)
             {
-                renderEntity(renderEntities.data() + j, locationsDescriptor, batch->elememtCount);
+                renderEntity(entities.data() + j, memory.locationsDescriptors.data() + batch.data()->descriptorIndex, batch.data()->elememtCount);
             }
-
-            batchCursor.step_array<RenderEntity>(entityCount);
         }
     }
 
-    void render(const Allocator* allocator)
+    void render(const ConstGraphicsMemory& memory)
     {
-        // uploadUniformBuffer(allocator);
-        // renderBatches(allocator);
+        uploadUniformBuffer(memory);
+        renderBatches(memory);
     }
 }

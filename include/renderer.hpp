@@ -8,11 +8,8 @@
 #include <memory_view.hpp>
 
 #include "graphics_memory.hpp"
-#include "mesh.hpp"
 #include "mesh_span.hpp"
-#include "render_batch.h"
-#include "render_entity.h"
-#include "shader.h"
+#include "render_batch_span.hpp"
 
 namespace renderer
 {
@@ -26,20 +23,6 @@ namespace renderer
     static constexpr uint64_t MEMORY_ALIGNMENT  = 16;
 
     using Allocator = BumpAllocator<16>;
-
-    uint64_t getBufferOffset(const Allocator* allocator);
-    uint64_t getVertexArrayOffset(const Allocator* allocator);
-    uint64_t getTextureOffset(const Allocator* allocator);
-    uint64_t getShaderOffset(const Allocator* allocator);
-    uint64_t getShaderProgramOffset(const Allocator* allocator);
-    uint64_t getMeshDataOffset(const Allocator* allocator);
-    uint64_t getLocationsDescriptorOffset(const Allocator* allocator);
-    uint64_t getCameraEyeOffset(const Allocator* allocator);
-    uint64_t getCameraFrustumOffset(const Allocator* allocator);
-    uint64_t getCameraOffset(const Allocator* allocator);
-    uint64_t getUniformBufferOffset(const Allocator* allocator);
-    uint64_t getUniformSegmentOffset(const Allocator* allocator);
-    uint64_t getRenderBatchOffset(const Allocator* allocator);
 
     template<bool IsConst = false>
     inline GraphicsMemory<IsConst> readGraphicsMemory(std::conditional_t<IsConst, const Allocator*, Allocator*> allocator)
@@ -182,8 +165,8 @@ namespace renderer
 
     void initializeGraphicsState();
     void clearFrameBuffer();
-    void renderBatch(const RenderBatch* batch);
     void renderEntity(const RenderEntity* entity, const LocationsDescriptor* descriptor, int elementCount);
-    void renderBatches(const Allocator* allocator);
-    void render(const Allocator* allocator);
+    void renderBatch(const RenderBatchSpan<true>& span);
+    void renderBatches(const ConstGraphicsMemory& memory);
+    void render(const ConstGraphicsMemory& memory);
 }

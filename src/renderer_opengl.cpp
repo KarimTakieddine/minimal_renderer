@@ -7,7 +7,6 @@
 #include "locations_descriptor.h"
 #include "opengl_allocator.h"
 #include "platform.h"
-#include "render_batch_span.hpp"
 #include "renderer.hpp"
 #include "shader.h"
 #include "uniform_buffer_segment.h"
@@ -511,10 +510,12 @@ namespace renderer
         return true;
     }
 
-    void renderBatch(const RenderBatch* batch)
+    void renderBatch(const RenderBatchSpan<true>& span)
     {
-        glUseProgram(batch->shaderProgram);
-        glBindVertexArray(batch->vertexArray);
+        const auto* renderBatch = span.renderBatch.data();
+
+        glUseProgram(renderBatch->shaderProgram);
+        glBindVertexArray(renderBatch->vertexArray);
     }
 
     void renderEntity(const RenderEntity* entity, const LocationsDescriptor* descriptor, int elementCount)

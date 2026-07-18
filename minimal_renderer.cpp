@@ -39,12 +39,14 @@ int main(int argc, char** argv)
     renderer::initializeGraphicsResources(mutableGraphicsMemory);
     renderer::initializeGraphicsState();
 
+    renderer::ConstGraphicsMemory constGraphicsMemory = renderer::freezeGraphicsMemory(mutableGraphicsMemory);
+
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
         renderer::clearFrameBuffer();
-        //renderer::render(&renderAllocator);
+        renderer::render(constGraphicsMemory);
 
         glfwSwapBuffers(window);
     }

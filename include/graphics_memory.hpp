@@ -46,7 +46,8 @@ namespace renderer
             memory.cameraFrustum,
             memory.camera,
             memory.uniformBuffer,
-            memory.uniformBufferSegments
+            memory.uniformBufferSegments,
+            memory.renderBatchSpan
         };
     }
 }
